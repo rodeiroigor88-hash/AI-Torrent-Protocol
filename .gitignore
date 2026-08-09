@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+
+# Build artifacts (generados por build.py / PyInstaller)
+build/
+dist/
+*.spec
+
+# Entornos y IDE
+.venv/
+venv/
+.vscode/
+.idea/
+
+# Archivos temporales de scratch
+temp_*.py
+
+# PKI del enjambre (claves privadas: nunca versionar)
+certs/
+.smoke_certs/
+*.key
+*.crt
+*.pub
+
+# Firma de código (certificados y metadatos: nunca versionar)
+*.pfx
+*.p12
+metadata.json
