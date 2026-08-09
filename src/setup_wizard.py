@@ -91,6 +91,11 @@ class SetupWizard(ctk.CTk):
             if os.path.exists(p3): return p3
         p4 = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
         if os.path.exists(p4): return p4
+        # Ejecutando desde el codigo fuente: el paquete compilado esta en dist/,
+        # asi que el asistente se puede probar sin congelarlo antes.
+        p5 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "dist", filename)
+        if os.path.exists(p5): return p5
         raise FileNotFoundError(f"No se pudo encontrar el recurso: {filename}")
 
     def build_ui(self):
@@ -297,23 +302,29 @@ class SetupWizard(ctk.CTk):
             os.makedirs(self.install_dir, exist_ok=True)
             time.sleep(0.6)
             
-            self.update_progress(0.3, "Extrayendo Ghost Terminal...")
-            
-            src_file = self.find_resource("ghost_terminal.exe")
-            dest_file = os.path.join(self.install_dir, "ghost_terminal.exe")
-            shutil.copy(src_file, dest_file)
-            
-            if self.install_worker:
-                self.update_progress(0.5, "Inyectando AI Torrent Worker...")
-                worker_src = self.find_resource("p2p_node.exe")
-                worker_dest = os.path.join(self.install_dir, "p2p_node.exe")
-                shutil.copy(worker_src, worker_dest)
-                
-            self.update_progress(0.6, "Inyectando Desinstalador...")
-            uninstaller_src = self.find_resource("uninstaller.exe")
-            uninstaller_dest = os.path.join(self.install_dir, "uninstaller.exe")
-            if os.path.exists(uninstaller_src):
-                shutil.copy(uninstaller_src, uninstaller_dest)
+            self.update_progress(0.3, "Extrayendo Ghost Terminal (esto tarda un poco)...")
+
+            # Los tres ejecutables comparten un unico runtime dentro de
+            # GhostTerminal/_internal, asi que se copia el arbol entero. Copiar
+            # solo los .exe dejaria una instalacion que no arranca.
+            bundle_src = self.find_resource("GhostTerminal")
+            shutil.copytree(bundle_src, self.install_dir, dirs_exist_ok=True)
+
+            # Con el runtime compartido, omitir el worker ya no ahorra espacio
+            # (su .exe son unos pocos MB); la casilla decide si se registra en
+            # el arranque, no si se copia.
+            if not self.install_worker:
+                worker_exe = os.path.join(self.install_dir, "p2p_node.exe")
+                if os.path.exists(worker_exe):
+                    os.remove(worker_exe)
+
+            self.update_progress(0.6, "Verificando la instalación...")
+            required = ["ghost_terminal.exe", "uninstaller.exe"]
+            missing = [name for name in required
+                       if not os.path.exists(os.path.join(self.install_dir, name))]
+            if missing:
+                raise FileNotFoundError(
+                    f"La copia quedó incompleta, faltan: {', '.join(missing)}")
             time.sleep(0.5)
 
             self.update_progress(0.65, "Comprobando puertos disponibles...")

@@ -161,7 +161,7 @@ No es solo "probar los .exe": hay cuatro cosas en el código que harán fallar l
 
 - **Logging a fichero en el worker.** `p2p_node.exe` se compila con `--noconsole` ([build.py](../build.py)). Si `worker.py` aborta por `parser.error` (por ejemplo, token ausente) sale con código 2 **sin ninguna traza visible**. Añadir `FileHandler` a `%LOCALAPPDATA%\GhostTerminal\worker.log` antes de tocar la VM; si no, cualquier fallo será indistinguible de "no arranca".
 - **Propagación de la variable de entorno.** `register_worker_autostart` escribe `AI_TORRENT_AUTH_TOKEN` en `HKCU\Environment` ([setup_wizard.py:322-323](../src/setup_wizard.py#L322)) sin difundir `WM_SETTINGCHANGE`. La entrada `Run` la recogerá en el siguiente inicio de sesión, pero hay que **verificarlo explícitamente en la VM**, porque el modo de fallo es el silencioso del punto anterior.
-- **`build.py` borra los `.spec` versionados.** Elimina todos los `*.spec` de la raíz antes de compilar, y hay cuatro en el árbol de trabajo (`.gitignore` los ignora). Decidir si se versionan o se generan.
+- ~~**`build.py` borra los `.spec` versionados.**~~ **Resuelto:** `ghost_bundle.spec` es ahora código fuente versionado y `build.py` lo respeta al limpiar; el resto de `*.spec` se siguen borrando por ser artefactos.
 - **Autoarranque con `--enable-upnp --host 0.0.0.0`** ([setup_wizard.py:324](../src/setup_wizard.py#L324)): abrir puerto al exterior por defecto en la instalación es una decisión de producto que conviene revisar antes de distribuir binarios, y que TLS (tarea 1) debería condicionar.
 
 ### Antivirus: el riesgo real
@@ -176,14 +176,14 @@ La combinación acumula casi todas las heurísticas clásicas de falso positivo:
 | `--uac-admin` en el instalador | elevación |
 | apertura de puerto por UPnP | comportamiento de red no solicitado |
 
-Mitigaciones, de mayor a menor efecto: **certificado de firma de código** (la única solución de fondo); pasar el worker a `--onedir`; enviar los binarios a Microsoft como falso positivo; sustituir `keyboard` por una API de hotkey menos marcada.
+Mitigaciones, de mayor a menor efecto: **certificado de firma de código** (la única solución de fondo, en marcha vía [SignPath](firma-codigo.md)); ~~pasar a `--onedir`~~ **hecho** (`ghost_bundle.spec`: ya no hay autoextracción en `%TEMP%`); enviar los binarios a Microsoft como falso positivo; sustituir `keyboard` por una API de hotkey menos marcada.
 
 ### Matriz de pruebas
 
 - Win10 y Win11 limpios, sin Python, Defender activo y actualizado.
 - Usuario estándar **y** administrador (la instalación escribe en HKCU y `LOCALAPPDATA`, pero el instalador pide `--uac-admin`).
 - **Primer arranque sin conexión**: `transformers` descargará el modelo de HuggingFace en el primer uso — `--collect-all transformers` no empaqueta pesos. Comprobar el mensaje de error y que la caché HF sea escribible.
-- Tiempo de arranque de `--onefile` con torch (varios GB de extracción en cada lanzamiento).
+- Tiempo de arranque: con `--onedir` ya no hay extracción por lanzamiento, pero conviene medirlo igualmente en la VM (la carga de `torch_cpu.dll` sigue siendo pesada).
 - **Desinstalación**: que `uninstaller.exe` retire las dos claves `Run`, la entrada de `PATH` y `AI_TORRENT_AUTH_TOKEN`.
 - Reinstalación sobre una instalación previa (el instalador hace `taskkill` de los dos ejecutables; verificar que no quedan ficheros bloqueados).
 

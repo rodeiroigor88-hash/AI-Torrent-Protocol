@@ -54,7 +54,7 @@ python tests/test_phase1_poc.py
 ```
 `test_phase2_gpt2.py` (downloads GPT-2), `test_phase2_5_benchmark.py` (compression benchmark, no network) and `test_phase3_e2e.py` (spawns real workers + agent, downloads Qwen, ~2 min) all hit the network or disk cache.
 
-Build Windows executables (requires PyInstaller; deletes `build/`, `dist/` and all `*.spec` first):
+Build Windows executables (requires PyInstaller; wipes `build/` and `dist/`, and deletes generated `*.spec` files — but never `ghost_bundle.spec`, which is versioned source):
 ```bash
 python build.py
 ```
@@ -83,7 +83,7 @@ python build.py
 
 **Security posture.** `_check_auth` accepts a request if it presented a valid swarm-CA client certificate (mTLS — OpenSSL already rejected the rest at handshake), else if `hmac.compare_digest` matches the shared `--auth-token` / `AI_TORRENT_AUTH_TOKEN`, else if there's no token and the caller is loopback. Binding outside localhost requires TLS, or an explicit `--insecure-no-tls` plus a token. `--enable-upnp` requires a token or TLS. UPnP, tracker registration (`https://jarvis.supercores.host/ai-torrent`) and the KV cache are all **off by default** — keep them opt-in. The KV cache key hashes the payload only: including `hop` or `request_id` makes it silently never hit.
 
-**GUI/installer layer** (`ghost_terminal.py`, `setup_wizard.py`, `uninstaller.py`) is Windows-only customtkinter and wraps `AgenticChat`; `build.py` packages all four binaries, with the setup wizard embedding the other three from `dist/`. Both GUIs use `overrideredirect(True)`, which removes the OS frame — hence the hand-rolled drag and the eight resize grips in the wizard. pystray callbacks run on their own thread, so everything they touch goes through `self.after(0, ...)`; Tkinter is not thread-safe. The uninstaller cleans the registry **before** killing processes: a half-closed uninstaller may leave orphan files, but must never leave an autostart entry that resurrects the app.
+**GUI/installer layer** (`ghost_terminal.py`, `setup_wizard.py`, `uninstaller.py`) is Windows-only customtkinter and wraps `AgenticChat`; `build.py` packages all four binaries. `ghost_bundle.spec` builds `ghost_terminal.exe`, `p2p_node.exe` and `uninstaller.exe` into a **single `dist/GhostTerminal/` folder with one shared `_internal/`** — three separate `--onefile` builds embedded PyTorch twice (271 MB + 273 MB) and made the installer 602 MB; sharing the runtime also removes the per-launch extraction to `%TEMP%` and one of the antivirus heuristics. The setup wizard embeds that whole folder and `copytree`s it, so copying only the `.exe` files yields an installation that will not start. Both GUIs use `overrideredirect(True)`, which removes the OS frame — hence the hand-rolled drag and the eight resize grips in the wizard. pystray callbacks run on their own thread, so everything they touch goes through `self.after(0, ...)`; Tkinter is not thread-safe. The uninstaller cleans the registry **before** killing processes: a half-closed uninstaller may leave orphan files, but must never leave an autostart entry that resurrects the app.
 
 ## Notes
 

@@ -131,7 +131,11 @@ python src/worker.py --port 8001 --layers 8-15 --cpu-cores 2 --max-ram-percent 2
 
 ## ⬇️ Descargas y firma de código
 
-Las versiones publicadas están en la [página de Releases](https://github.com/rodeiroigor88-hash/AI-Torrent-Protocol/releases).
+Las versiones publicadas están en la [página de Releases](https://github.com/rodeiroigor88-hash/AI-Torrent-Protocol/releases). Descarga el `.zip`, descomprímelo y ejecuta `Ghost Terminal Setup.exe`; el asistente instala la carpeta `GhostTerminal` que viene a su lado.
+
+**Requisitos de espacio:** unos 290 MB de descarga y ~875 MB instalados. El peso viene de PyTorch (`torch_cpu.dll` son 291 MB por sí solos), que va empaquetado para que no tengas que instalar Python. Los tres ejecutables comparten un único runtime en `_internal`, así que PyTorch se incluye **una sola vez**: antes se duplicaba y el instalador pesaba 602 MB.
+
+Además hace falta conexión en el primer arranque: el modelo se descarga de HuggingFace, no viene dentro del instalador.
 
 Los binarios de Windows (`Ghost Terminal Setup.exe`, `ghost_terminal.exe`, `p2p_node.exe` y `uninstaller.exe`) se firman digitalmente de forma gratuita gracias a la [**SignPath Foundation**](https://signpath.org/), con un certificado proporcionado por [**SignPath.io**](https://signpath.io/). Sin esa firma, Windows bloquearía la instalación mediante Control inteligente de aplicaciones (*Smart App Control*).
 

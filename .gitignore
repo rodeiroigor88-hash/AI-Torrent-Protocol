@@ -10,6 +10,9 @@ __pycache__/
 build/
 dist/
 *.spec
+# ...salvo el nuestro, que es codigo fuente: define como se comparte el runtime
+# entre los tres ejecutables. Sin el, el paquete vuelve a duplicar PyTorch.
+!ghost_bundle.spec
 
 # Entornos y IDE
 .venv/
