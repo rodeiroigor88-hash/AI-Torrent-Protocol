@@ -34,10 +34,27 @@ Ordenadas por relación coste / rapidez en dejar de ser bloqueado:
 | **Certificado OV** estándar | ~150–250 $/año | Validación de identidad | Parcial: Authenticado válido, pero la reputación de SmartScreen **se gana con el tiempo**; SAC puede seguir bloqueando al principio |
 | Autofirmado | Gratis | — | **No** (inútil para SAC) |
 
-Recomendación para este proyecto (es open source, Apache-2.0): empezar por
-**SignPath (plan OSS)** o **Azure Trusted Signing**. Un cert **EV** es lo más
-sólido si vas a distribuir en serio y quieres cero fricción desde el primer
+**Opción elegida para este proyecto: SignPath Foundation** (plan gratuito para
+proyectos de código abierto). Alternativas si esa vía no prosperase: Azure
+Trusted Signing, o un certificado EV si se quiere cero fricción desde el primer
 binario.
+
+### Requisitos de la SignPath Foundation
+
+Al solicitarlo hay que tener en cuenta dos cosas que se comprueban **durante la
+revisión**, no después:
+
+1. **La *Download URL* debe mencionar que el proyecto usa SignPath.** Ojo: la
+   página de *Releases* de GitHub **no** renderiza el README, así que si se
+   apunta ahí y no hay ninguna release publicada con esa mención en sus notas,
+   el revisor no encontrará nada. La atribución vive en la sección
+   "Descargas y firma de código" del README, que es lo que se ve en la raíz del
+   repositorio.
+2. **La *Privacy Policy URL*** debe llevar a algo que describa qué datos maneja
+   el software. La sección "Privacidad" del README cubre ese punto.
+
+Al publicar la primera release, conviene repetir la frase de atribución a
+SignPath en las notas de la release.
 
 Lo que yo **no** puedo hacer por ti: comprar el certificado, superar la
 validación de identidad ni instalar la credencial. Eso lo haces tú con el

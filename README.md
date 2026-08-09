@@ -129,6 +129,33 @@ python src/worker.py --port 8001 --layers 8-15 --cpu-cores 2 --max-ram-percent 2
 * `src/config.py`: Configuración persistente (atajo, tracker, puertos, recursos donados).
 * `src/gen_certs.py` / `src/attest.py`: Herramientas de línea de comandos para la PKI y la verificación de nodos.
 
+## ⬇️ Descargas y firma de código
+
+Las versiones publicadas están en la [página de Releases](https://github.com/rodeiroigor88-hash/AI-Torrent-Protocol/releases).
+
+Los binarios de Windows (`Ghost Terminal Setup.exe`, `ghost_terminal.exe`, `p2p_node.exe` y `uninstaller.exe`) se firman digitalmente de forma gratuita gracias a la [**SignPath Foundation**](https://signpath.org/), con un certificado proporcionado por [**SignPath.io**](https://signpath.io/). Sin esa firma, Windows bloquearía la instalación mediante Control inteligente de aplicaciones (*Smart App Control*).
+
+Puedes verificar la firma de cualquier binario descargado con:
+
+```bash
+python sign.py --verify "Ghost Terminal Setup.exe"
+```
+
+El proceso de firma está documentado en [docs/firma-codigo.md](docs/firma-codigo.md).
+
+## 🔒 Privacidad
+
+Este es un sistema P2P: para funcionar, parte de la información sale necesariamente de tu equipo. Esto es exactamente lo que ocurre, y nada más:
+
+* **Si ejecutas un Worker (donas recursos):** tu nodo envía al tracker su identificador, la **dirección IP y el puerto** por los que es alcanzable, el rango de capas que aloja, la RAM y los núcleos donados. Es imprescindible para que otros nodos puedan encontrarte. El registro en el tracker está **desactivado por defecto** (`--enable-tracker`).
+* **Si usas el cliente (chateas):** tu texto se convierte en tensores (*hidden states*) que viajan a los nodos del enjambre para completar la inferencia. **Esos tensores derivan de tu conversación.** La compresión no es cifrado: usa TLS/mTLS para que el tráfico no sea legible en tránsito.
+* **Lo que NO se envía nunca:** el contenido de tus archivos, tus credenciales, ni telemetría de uso. No hay analítica, ni publicidad, ni perfilado. No existe una base de datos central de usuarios.
+* **Lo que se queda en tu equipo:** la configuración (`%LOCALAPPDATA%\GhostTerminal\config.json`), el log del worker y las claves privadas de tus certificados, que nunca se transmiten.
+
+Al ser software de código abierto, todo lo anterior es verificable leyendo el código: el registro en el tracker está en `src/p2p_node.py` y el envío de tensores en `src/chat_agent.py`.
+
+Este proyecto no ofrece garantía de privacidad diferencial formal: un nodo del enjambre procesa activaciones derivadas de tu texto. Tenlo en cuenta antes de enviar información sensible.
+
 ## 🤝 Contribuir
 
 ¡Las Pull Requests son bienvenidas! Si deseas contribuir al protocolo de la próxima generación, abre un *Issue* o envía un PR. Estamos buscando implementar un Tracker DHT y Load Balancing Dinámico.
