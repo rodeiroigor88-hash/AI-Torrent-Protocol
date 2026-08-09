@@ -27,8 +27,8 @@ from src.tensor_utils import serialize_tensor
 @pytest.fixture
 def temp_config(tmp_path, monkeypatch):
     path = tmp_path / "config.json"
-    monkeypatch.setenv("AI_TORRENT_CONFIG", str(path))
-    monkeypatch.delenv("AI_TORRENT_TRACKER_URL", raising=False)
+    monkeypatch.setenv("TOKENTORRENT_CONFIG", str(path))
+    monkeypatch.delenv("TOKENTORRENT_TRACKER_URL", raising=False)
     return path
 
 
@@ -73,15 +73,15 @@ def test_invalid_tracker_urls_are_rejected(url):
 
 
 def test_local_tracker_url_is_accepted():
-    cleaned = config_module.sanitize({"tracker_url": "http://127.0.0.1:5000/ai-torrent/"})
-    assert cleaned["tracker_url"] == "http://127.0.0.1:5000/ai-torrent"
+    cleaned = config_module.sanitize({"tracker_url": "http://127.0.0.1:5000/tokentorrent/"})
+    assert cleaned["tracker_url"] == "http://127.0.0.1:5000/tokentorrent"
 
 
 def test_environment_overrides_the_config_file(temp_config, monkeypatch):
     config_module.save_config({**config_module.DEFAULTS,
                                "tracker_url": "http://127.0.0.1:5000/a"})
     assert config_module.tracker_url() == "http://127.0.0.1:5000/a"
-    monkeypatch.setenv("AI_TORRENT_TRACKER_URL", "http://127.0.0.1:6000/b")
+    monkeypatch.setenv("TOKENTORRENT_TRACKER_URL", "http://127.0.0.1:6000/b")
     assert config_module.tracker_url() == "http://127.0.0.1:6000/b"
 
 
@@ -96,12 +96,12 @@ def test_settings_panel_round_trip_reaches_the_running_components(temp_config):
     """Lo que guarda el panel de Ajustes es lo que leen worker y cliente."""
     config_module.save_config({**config_module.DEFAULTS,
                                "hotkey": "ctrl+alt+j",
-                               "tracker_url": "http://127.0.0.1:5000/ai-torrent",
+                               "tracker_url": "http://127.0.0.1:5000/tokentorrent",
                                "cpu_cores": 2, "max_ram_percent": 30})
 
     node = P2PNode(port=0, **{key: config_module.load_config()[key] for key in
                               ("max_ram_percent", "cpu_cores", "cpu_pause_threshold")})
-    assert node.tracker_url == "http://127.0.0.1:5000/ai-torrent"
+    assert node.tracker_url == "http://127.0.0.1:5000/tokentorrent"
     assert node.donated_cores == min(2, os.cpu_count() or 1)
     assert node.max_ram_percent == 30
     assert config_module.load_config()["hotkey"] == "ctrl+alt+j"

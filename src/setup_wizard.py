@@ -167,7 +167,7 @@ class SetupWizard(ctk.CTk):
         browse_btn.pack(side="left")
         # -------------------------------
         
-        worker_cb = ctk.CTkCheckBox(self.options_frame, text="Instalar AI Torrent Worker (Donar Recursos)", 
+        worker_cb = ctk.CTkCheckBox(self.options_frame, text="Instalar TokenTorrent Worker (Donar Recursos)", 
                                     font=("Consolas", 12), text_color="#FFFFFF", fg_color="#00FF41", 
                                     hover_color="#00CC33", variable=self.worker_var)
         worker_cb.pack(anchor="w", pady=5)
@@ -428,10 +428,10 @@ class SetupWizard(ctk.CTk):
     def register_worker_autostart(self):
         """Registra p2p_node.exe en el arranque de Windows para que el nodo done
         recursos automáticamente. Sin esta entrada, marcar la casilla "Instalar
-        AI Torrent Worker" solo copiaba el ejecutable sin arrancarlo nunca."""
+        TokenTorrent Worker" solo copiaba el ejecutable sin arrancarlo nunca."""
         worker_path = os.path.join(self.install_dir, "p2p_node.exe")
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
-            winreg.SetValueEx(key, "AI_TORRENT_AUTH_TOKEN", 0, winreg.REG_SZ, self.auth_token)
+            winreg.SetValueEx(key, "TOKENTORRENT_AUTH_TOKEN", 0, winreg.REG_SZ, self.auth_token)
         self._broadcast_environment_change()
         # --insecure-no-tls es obligatorio y explícito: una instalación normal no
         # dispone de un certificado emitido por la CA del enjambre, así que el
@@ -444,7 +444,7 @@ class SetupWizard(ctk.CTk):
             winreg.HKEY_CURRENT_USER,
             r"Software\Microsoft\Windows\CurrentVersion\Run",
         ) as key:
-            winreg.SetValueEx(key, "AITorrentWorker", 0, winreg.REG_SZ, command)
+            winreg.SetValueEx(key, "TokenTorrentWorker", 0, winreg.REG_SZ, command)
 
     # ------------------------------------------------ redimensionado
 

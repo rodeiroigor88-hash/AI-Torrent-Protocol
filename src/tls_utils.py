@@ -1,9 +1,9 @@
-"""Utilidades de PKI y TLS/mTLS para el enjambre AI Torrent.
+"""Utilidades de PKI y TLS/mTLS para el enjambre TokenTorrent.
 
 La identidad de un nodo es su certificado X.509, no su IP. Como los nodos
 domesticos tienen IP dinamica, el certificado hoja lleva el `node_id` en un
-SAN de tipo dNSName (`<node_id>.node.aitorrent`) y el cliente conecta a la IP
-pero pasando `server_hostname=<node_id>.node.aitorrent`. Asi la verificacion
+SAN de tipo dNSName (`<node_id>.node.tokentorrent`) y el cliente conecta a la IP
+pero pasando `server_hostname=<node_id>.node.tokentorrent`. Asi la verificacion
 de hostname de OpenSSL valida la identidad del nodo, desacoplada de la IP.
 
 Las claves son EC P-256 (ECDSA/SHA-256): universalmente soportadas en TLS y
@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-NODE_DNS_SUFFIX = "node.aitorrent"
+NODE_DNS_SUFFIX = "node.tokentorrent"
 DEFAULT_CA_DAYS = 3650
 DEFAULT_LEAF_DAYS = 397
 
@@ -34,12 +34,12 @@ def _generate_key():
     return ec.generate_private_key(ec.SECP256R1())
 
 
-def generate_ca(common_name: str = "AI Torrent Swarm CA", days: int = DEFAULT_CA_DAYS):
+def generate_ca(common_name: str = "TokenTorrent Swarm CA", days: int = DEFAULT_CA_DAYS):
     """Crea la CA privada del enjambre. Devuelve (clave_privada, certificado)."""
     key = _generate_key()
     subject = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, common_name),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "AI Torrent Protocol"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "TokenTorrent"),
     ])
     now = datetime.datetime.now(datetime.timezone.utc)
     cert = (
@@ -75,7 +75,7 @@ def generate_node_cert(node_id: str, ca_key, ca_cert, days: int = DEFAULT_LEAF_D
     key = _generate_key()
     subject = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, node_id),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "AI Torrent Node"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "TokenTorrent Node"),
     ])
 
     alt_names = [x509.DNSName(node_sni(node_id))]
@@ -145,7 +145,7 @@ def load_private_key(path: str):
 
 
 def cert_node_id(cert) -> str:
-    """Extrae el `node_id` del SAN dNSName `<node_id>.node.aitorrent`."""
+    """Extrae el `node_id` del SAN dNSName `<node_id>.node.tokentorrent`."""
     try:
         san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
     except x509.ExtensionNotFound:

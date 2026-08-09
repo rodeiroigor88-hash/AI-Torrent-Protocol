@@ -666,7 +666,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-Coder-0.5B-Instruct")
     parser.add_argument("--end-layer", type=int, default=DEFAULT_CLIENT_END_LAYER,
                         help="Última capa que ejecuta el cliente; los workers empiezan en la siguiente")
-    parser.add_argument("--auth-token", type=str, default=os.environ.get("AI_TORRENT_AUTH_TOKEN"),
+    parser.add_argument("--auth-token", type=str, default=os.environ.get("TOKENTORRENT_AUTH_TOKEN"),
                          help="Secreto compartido del enjambre (debe coincidir con el de los workers)")
     parser.add_argument("--callback-url", type=str, default=None,
                         help="URL publica de nuestro /callback (necesaria si estamos tras NAT)")
@@ -674,9 +674,9 @@ if __name__ == "__main__":
                         help="Probabilidad [0-1] de auditar un paso por una ruta alternativa")
     parser.add_argument("--audit-epsilon", type=float, default=DEFAULT_EPSILON,
                         help="Tolerancia L2 relativa al comparar dos ejecuciones")
-    parser.add_argument("--tls-cert", type=str, default=os.environ.get("AI_TORRENT_TLS_CERT"))
-    parser.add_argument("--tls-key", type=str, default=os.environ.get("AI_TORRENT_TLS_KEY"))
-    parser.add_argument("--tls-ca", type=str, default=os.environ.get("AI_TORRENT_TLS_CA"))
+    parser.add_argument("--tls-cert", type=str, default=os.environ.get("TOKENTORRENT_TLS_CERT"))
+    parser.add_argument("--tls-key", type=str, default=os.environ.get("TOKENTORRENT_TLS_KEY"))
+    parser.add_argument("--tls-ca", type=str, default=os.environ.get("TOKENTORRENT_TLS_CA"))
     parser.add_argument("--no-client-cert", action="store_true",
                         help="No exigir certificado a quien invoque nuestro /callback")
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-"""Desinstalador de Ghost Terminal y del worker AI Torrent.
+"""Desinstalador de Ghost Terminal y del worker TokenTorrent.
 
 Orden deliberado: **primero el registro, luego los procesos, luego los ficheros**.
 Si el usuario cierra el desinstalador a medias, lo peor que puede pasar es que
@@ -20,11 +20,11 @@ except ImportError:  # el .exe deberia traerlo; si no, quedan taskkill y wmic
     psutil = None
 
 PROCESS_NAMES = ("ghost_terminal.exe", "p2p_node.exe", "Ghost Terminal Setup.exe")
-RUN_VALUES = ("GhostTerminal", "AITorrentWorker")
+RUN_VALUES = ("GhostTerminal", "TokenTorrentWorker")
 ENVIRONMENT_VALUES = (
-    "AI_TORRENT_AUTH_TOKEN", "AI_TORRENT_TLS_CERT", "AI_TORRENT_TLS_KEY",
-    "AI_TORRENT_TLS_CA", "AI_TORRENT_TRACKER_KEY", "AI_TORRENT_TRACKER_URL",
-    "AI_TORRENT_CONFIG",
+    "TOKENTORRENT_AUTH_TOKEN", "TOKENTORRENT_TLS_CERT", "TOKENTORRENT_TLS_KEY",
+    "TOKENTORRENT_TLS_CA", "TOKENTORRENT_TRACKER_KEY", "TOKENTORRENT_TRACKER_URL",
+    "TOKENTORRENT_CONFIG",
 )
 KILL_ROUNDS = 5
 
@@ -161,7 +161,7 @@ def data_directory():
 
 
 def main():
-    print("Iniciando desinstalacion de Ghost Terminal y AI Torrent Worker...")
+    print("Iniciando desinstalacion de Ghost Terminal y TokenTorrent Worker...")
     install_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
         else os.path.dirname(os.path.abspath(__file__))
 

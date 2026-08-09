@@ -90,7 +90,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.tracker_entry = self._field(
             "URL del Tracker", self.config_data["tracker_url"],
-            "Para pruebas locales: http://127.0.0.1:5000/ai-torrent",
+            "Para pruebas locales: http://127.0.0.1:5000/tokentorrent",
         )
 
         self.status_lbl = ctk.CTkLabel(self, text="", font=("Consolas", 11), text_color="#FF9900")
@@ -205,7 +205,7 @@ class GhostTerminal(ctk.CTk):
         self.output_text.insert(
             "0.0",
             "SYSTEM_BOOT: THE GHOST TERMINAL V1.0\n"
-            "STATUS: CONNECTED TO AI TORRENT SWARM\n"
+            "STATUS: CONNECTED TO TOKENTORRENT SWARM\n"
             f"PRESS [{self.settings['hotkey'].upper()}] TO HIDE/SHOW\n\n"
         )
         self.output_text.configure(state="disabled")
@@ -493,10 +493,10 @@ if __name__ == "__main__":
     # sigue funcionando en claro contra un enjambre local.
     chat = AgenticChat(model_name="Qwen/Qwen2.5-Coder-0.5B-Instruct",
                         client_port=settings["client_port"],
-                        auth_token=os.environ.get("AI_TORRENT_AUTH_TOKEN"),
-                        tls_cert=os.environ.get("AI_TORRENT_TLS_CERT"),
-                        tls_key=os.environ.get("AI_TORRENT_TLS_KEY"),
-                        tls_ca=os.environ.get("AI_TORRENT_TLS_CA"),
+                        auth_token=os.environ.get("TOKENTORRENT_AUTH_TOKEN"),
+                        tls_cert=os.environ.get("TOKENTORRENT_TLS_CERT"),
+                        tls_key=os.environ.get("TOKENTORRENT_TLS_KEY"),
+                        tls_ca=os.environ.get("TOKENTORRENT_TLS_CA"),
                         tracker_url=settings["tracker_url"])
 
     # Crear un loop dedicado para el backend

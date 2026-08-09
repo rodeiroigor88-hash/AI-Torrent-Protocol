@@ -1,17 +1,17 @@
-# AI Torrent Protocol
+# TokenTorrent
 
 ![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-AI-orange)
 ![Status](https://img.shields.io/badge/Status-Beta-brightgreen)
 
-**AI Torrent Protocol** es un ecosistema descentralizado (P2P) de código abierto diseñado para democratizar la Inteligencia Artificial. Al igual que BitTorrent revolucionó el intercambio de archivos, este protocolo permite a múltiples usuarios de bajos recursos unir su memoria RAM y CPU para ejecutar Modelos de Lenguaje Masivos (LLMs) de forma colectiva y gratuita.
+**TokenTorrent** es un ecosistema descentralizado (P2P) de código abierto diseñado para democratizar la Inteligencia Artificial. Al igual que BitTorrent revolucionó el intercambio de archivos, este protocolo permite a múltiples usuarios de bajos recursos unir su memoria RAM y CPU para ejecutar Modelos de Lenguaje Masivos (LLMs) de forma colectiva y gratuita.
 
 Diseñado por [**rodeiroigor88**](https://github.com/rodeiroigor88).
 
-## 🚀 ¿Por qué AI Torrent?
+## 🚀 ¿Por qué TokenTorrent?
 
-Actualmente, ejecutar modelos potentes como Llama 3 o Qwen requiere GPUs inalcanzables para la mayoría. **AI Torrent Protocol** resuelve este problema usando *Pipeline Parallelism Dinámico*:
+Actualmente, ejecutar modelos potentes como Llama 3 o Qwen requiere GPUs inalcanzables para la mayoría. **TokenTorrent** resuelve este problema usando *Pipeline Parallelism Dinámico*:
 1. El modelo de IA se fragmenta en "Capas" (Layers).
 2. Cada ordenador de la red (incluso aquellos con solo 500MB de RAM) aloja un par de capas.
 3. Los tensores viajan de ordenador en ordenador a través de internet procesando la información.
@@ -31,8 +31,8 @@ Actualmente, ejecutar modelos potentes como Llama 3 o Qwen requiere GPUs inalcan
 
 ### 1. Clonar e Instalar
 ```bash
-git clone https://github.com/rodeiroigor88/AI-Torrent-Protocol.git
-cd AI-Torrent-Protocol
+git clone https://github.com/rodeiroigor88-hash/TokenTorrent.git
+cd TokenTorrent
 pip install -r requirements.txt
 ```
 
@@ -131,7 +131,7 @@ python src/worker.py --port 8001 --layers 8-15 --cpu-cores 2 --max-ram-percent 2
 
 ## ⬇️ Descargas y firma de código
 
-Las versiones publicadas están en la [página de Releases](https://github.com/rodeiroigor88-hash/AI-Torrent-Protocol/releases). Descarga el `.zip`, descomprímelo y ejecuta `Ghost Terminal Setup.exe`; el asistente instala la carpeta `GhostTerminal` que viene a su lado.
+Las versiones publicadas están en la [página de Releases](https://github.com/rodeiroigor88-hash/TokenTorrent/releases). Descarga el `.zip`, descomprímelo y ejecuta `Ghost Terminal Setup.exe`; el asistente instala la carpeta `GhostTerminal` que viene a su lado.
 
 **Requisitos de espacio:** unos 290 MB de descarga y ~875 MB instalados. El peso viene de PyTorch (`torch_cpu.dll` son 291 MB por sí solos), que va empaquetado para que no tengas que instalar Python. Los tres ejecutables comparten un único runtime en `_internal`, así que PyTorch se incluye **una sola vez**: antes se duplicaba y el instalador pesaba 602 MB.
 

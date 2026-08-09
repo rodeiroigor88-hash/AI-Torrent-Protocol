@@ -1,6 +1,6 @@
 """Configuracion persistente compartida por el cliente, el worker y el instalador.
 
-Vive en `%LOCALAPPDATA%\\GhostTerminal\\config.json` (o `~/.ai-torrent/` fuera de
+Vive en `%LOCALAPPDATA%\\GhostTerminal\\config.json` (o `~/.tokentorrent/` fuera de
 Windows), junto al log del worker. Existe para que el usuario pueda cambiar el
 atajo de teclado, la URL del tracker y cuantos recursos dona **sin tocar el
 codigo ni recompilar**.
@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TRACKER_URL = "https://jarvis.supercores.host/ai-torrent"
+DEFAULT_TRACKER_URL = "https://jarvis.supercores.host/tokentorrent"
 
 DEFAULTS = {
     # Interfaz
@@ -47,11 +47,11 @@ def config_dir() -> str:
     if os.name == "nt":
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
         return os.path.join(base, "GhostTerminal")
-    return os.path.join(os.path.expanduser("~"), ".ai-torrent")
+    return os.path.join(os.path.expanduser("~"), ".tokentorrent")
 
 
 def config_path() -> str:
-    override = os.environ.get("AI_TORRENT_CONFIG")
+    override = os.environ.get("TOKENTORRENT_CONFIG")
     if override:
         return override
     return os.path.join(config_dir(), "config.json")
@@ -162,7 +162,7 @@ def update_config(**changes) -> dict:
 
 def tracker_url() -> str:
     """URL del tracker: variable de entorno > config > valor por defecto."""
-    from_env = os.environ.get("AI_TORRENT_TRACKER_URL")
+    from_env = os.environ.get("TOKENTORRENT_TRACKER_URL")
     if from_env:
         return _clean_tracker_url(from_env, DEFAULT_TRACKER_URL)
     return load_config()["tracker_url"]

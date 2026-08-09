@@ -807,7 +807,7 @@ class P2PNode:
                 NewInternalPort=self.port,
                 NewInternalClient=lan_ip,
                 NewEnabled=1,
-                NewPortMappingDescription='AI Torrent Protocol Node',
+                NewPortMappingDescription='TokenTorrent Node',
                 NewLeaseDuration=0
             )
             logger.info(f"[Nodo {self.port}] UPnP EXITO: Puerto {self.port} abierto al mundo apuntando a {lan_ip}.")

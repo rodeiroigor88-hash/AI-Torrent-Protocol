@@ -88,10 +88,10 @@ def main():
     parser.add_argument("--seq-len", type=int, default=DEFAULT_ATTEST_SEQ_LEN)
     parser.add_argument("--epsilon", type=float, default=DEFAULT_EPSILON)
     parser.add_argument("--node-id", default=None, help="Identidad esperada (SNI y firma)")
-    parser.add_argument("--auth-token", default=os.environ.get("AI_TORRENT_AUTH_TOKEN"))
-    parser.add_argument("--tls-ca", default=os.environ.get("AI_TORRENT_TLS_CA"))
-    parser.add_argument("--tls-cert", default=os.environ.get("AI_TORRENT_TLS_CERT"))
-    parser.add_argument("--tls-key", default=os.environ.get("AI_TORRENT_TLS_KEY"))
+    parser.add_argument("--auth-token", default=os.environ.get("TOKENTORRENT_AUTH_TOKEN"))
+    parser.add_argument("--tls-ca", default=os.environ.get("TOKENTORRENT_TLS_CA"))
+    parser.add_argument("--tls-cert", default=os.environ.get("TOKENTORRENT_TLS_CERT"))
+    parser.add_argument("--tls-key", default=os.environ.get("TOKENTORRENT_TLS_KEY"))
     args = parser.parse_args()
 
     # La semilla debe ser impredecible: si el nodo la conociera de antemano

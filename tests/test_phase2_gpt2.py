@@ -13,7 +13,7 @@ from src.tensor_utils import serialize_tensor
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - [%(levelname)s] - %(name)s - %(message)s',
-    handlers=[logging.FileHandler("AI-Torrent.log"), logging.StreamHandler(sys.stdout)]
+    handlers=[logging.FileHandler("TokenTorrent.log"), logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
 

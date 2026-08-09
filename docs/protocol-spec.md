@@ -1,4 +1,4 @@
-# AI-Torrent-Protocol: Especificación del protocolo
+# TokenTorrent: Especificación del protocolo
 
 Este documento describe el protocolo **vigente**. El diseño original de la Fase 1
 se conserva al final como apéndice histórico.
@@ -27,8 +27,8 @@ en el emisor; se propaga con el sobre de error de §4.
 
 La identidad de un nodo es su **certificado X.509**, no su IP. Como las IP
 domésticas son dinámicas, el certificado hoja lleva el `node_id` en un SAN
-`dNSName` con el formato `<node_id>.node.aitorrent`, y el cliente conecta a la
-IP pasando `server_hostname=<node_id>.node.aitorrent`. Así la verificación de
+`dNSName` con el formato `<node_id>.node.tokentorrent`, y el cliente conecta a la
+IP pasando `server_hostname=<node_id>.node.tokentorrent`. Así la verificación de
 hostname de OpenSSL valida la identidad del nodo con independencia de la IP.
 
 * Claves EC P-256; TLS 1.2 como mínimo.
@@ -139,7 +139,7 @@ Petición: `{"seed": "<aleatoria>", "seq_len": 8, "hidden_size": 896}`.
 El nodo deriva de la semilla una entrada canónica determinista, la procesa con
 un solo hilo y algoritmos deterministas, y responde con la salida, su
 `digest` SHA-256 y una **firma ECDSA** hecha con la clave privada de su
-certificado sobre `"ai-torrent-attest-v1|<node_id>|<seed>|<digest>"`.
+certificado sobre `"tokentorrent-attest-v1|<node_id>|<seed>|<digest>"`.
 
 La semilla debe ser impredecible: si el nodo la conociera de antemano podría
 precalcular la respuesta sin alojar las capas. La firma liga la salida a la

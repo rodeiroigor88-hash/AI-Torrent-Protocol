@@ -101,7 +101,7 @@ def tensor_digest(tensor: torch.Tensor) -> bytes:
 
 def attestation_message(node_id: str, seed: str, digest: bytes) -> bytes:
     """Mensaje firmado: liga la salida a la identidad del nodo y al reto."""
-    return b"ai-torrent-attest-v1|" + node_id.encode("utf-8") + b"|" + \
+    return b"tokentorrent-attest-v1|" + node_id.encode("utf-8") + b"|" + \
            seed.encode("utf-8") + b"|" + digest
 
 

@@ -98,12 +98,12 @@ def cmd_tracker_key(args):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="PKI del enjambre AI Torrent")
+    parser = argparse.ArgumentParser(description="PKI del enjambre TokenTorrent")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init_ca = sub.add_parser("init-ca", help="Crea la CA privada del enjambre")
     init_ca.add_argument("--out", default="certs", help="Directorio de salida")
-    init_ca.add_argument("--common-name", default="AI Torrent Swarm CA")
+    init_ca.add_argument("--common-name", default="TokenTorrent Swarm CA")
     init_ca.add_argument("--days", type=int, default=DEFAULT_CA_DAYS)
     init_ca.add_argument("--force", action="store_true")
     init_ca.set_defaults(func=cmd_init_ca)

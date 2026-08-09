@@ -2,7 +2,7 @@
 # Proposito: Validar la instalacion, ejecucion y desinstalacion en una VM Windows Virgen
 
 Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "   Prueba en VM: AI Torrent Protocol v1.2    " -ForegroundColor Cyan
+Write-Host "   Prueba en VM: TokenTorrent v1.2    " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 
 $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
@@ -15,11 +15,11 @@ Pause
 
 # 1. Validar Variables de Entorno (HKCU)
 Write-Host "`n[1] Comprobando persistencia en el Registro (Variables de Entorno)..." -ForegroundColor Yellow
-$token = (Get-ItemProperty -Path $regPath -Name "AI_TORRENT_AUTH_TOKEN" -ErrorAction SilentlyContinue).AI_TORRENT_AUTH_TOKEN
+$token = (Get-ItemProperty -Path $regPath -Name "TOKENTORRENT_AUTH_TOKEN" -ErrorAction SilentlyContinue).TOKENTORRENT_AUTH_TOKEN
 if ($token) {
-    Write-Host "[PASS] AI_TORRENT_AUTH_TOKEN inyectado correctamente en HKCU." -ForegroundColor Green
+    Write-Host "[PASS] TOKENTORRENT_AUTH_TOKEN inyectado correctamente en HKCU." -ForegroundColor Green
 } else {
-    Write-Host "[FAIL] No se encontro AI_TORRENT_AUTH_TOKEN." -ForegroundColor Red
+    Write-Host "[FAIL] No se encontro TOKENTORRENT_AUTH_TOKEN." -ForegroundColor Red
 }
 
 # 2. Validar Logging Oculto (--noconsole)
@@ -48,11 +48,11 @@ Pause
 # 4. Validar Desinstalacion
 Write-Host "`n[4] Comprobando limpieza de desinstalador..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
-$tokenAfter = (Get-ItemProperty -Path $regPath -Name "AI_TORRENT_AUTH_TOKEN" -ErrorAction SilentlyContinue).AI_TORRENT_AUTH_TOKEN
+$tokenAfter = (Get-ItemProperty -Path $regPath -Name "TOKENTORRENT_AUTH_TOKEN" -ErrorAction SilentlyContinue).TOKENTORRENT_AUTH_TOKEN
 if ($tokenAfter) {
-    Write-Host "[FAIL] AI_TORRENT_AUTH_TOKEN sigue en el registro despues de desinstalar." -ForegroundColor Red
+    Write-Host "[FAIL] TOKENTORRENT_AUTH_TOKEN sigue en el registro despues de desinstalar." -ForegroundColor Red
 } else {
-    Write-Host "[PASS] AI_TORRENT_AUTH_TOKEN eliminado correctamente." -ForegroundColor Green
+    Write-Host "[PASS] TOKENTORRENT_AUTH_TOKEN eliminado correctamente." -ForegroundColor Green
 }
 
 $workerProcAfter = Get-Process -Name "p2p_node" -ErrorAction SilentlyContinue

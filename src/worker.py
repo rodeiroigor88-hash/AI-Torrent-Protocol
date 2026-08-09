@@ -23,7 +23,7 @@ def default_log_path() -> str:
         base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
         directory = os.path.join(base, 'GhostTerminal')
     else:
-        directory = os.path.join(os.path.expanduser('~'), '.ai-torrent')
+        directory = os.path.join(os.path.expanduser('~'), '.tokentorrent')
     try:
         os.makedirs(directory, exist_ok=True)
     except OSError:
@@ -34,7 +34,7 @@ def default_log_path() -> str:
 def configure_logging(log_file: str = None, level: int = logging.INFO) -> str:
     log_file = log_file or default_log_path()
     root = logging.getLogger()
-    if getattr(root, '_ai_torrent_configured', False):
+    if getattr(root, '_tokentorrent_configured', False):
         return log_file
 
     formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - %(name)s - %(message)s')
@@ -50,7 +50,7 @@ def configure_logging(log_file: str = None, level: int = logging.INFO) -> str:
     for handler in handlers:
         handler.setFormatter(formatter)
         root.addHandler(handler)
-    root._ai_torrent_configured = True
+    root._tokentorrent_configured = True
     return log_file
 
 
@@ -190,7 +190,7 @@ async def main():
     # usuario pueda ajustarlos sin reescribir la entrada de auto-arranque.
     settings = load_config()
 
-    parser = LoggingArgumentParser(description="AI Torrent Protocol - Worker Node")
+    parser = LoggingArgumentParser(description="TokenTorrent - Worker Node")
     parser.add_argument("--port", type=int, default=settings["worker_port"],
                         help=f"Puerto para escuchar peticiones (config: {settings['worker_port']})")
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-Coder-0.5B-Instruct", help="Nombre del modelo en HuggingFace")
@@ -198,7 +198,7 @@ async def main():
     parser.add_argument("--next-node", type=str, default=None,
                         help="URL del siguiente nodo (sobre v1); con rutas del tracker no hace falta")
     parser.add_argument("--is-last", action="store_true", help="Indica si este es el último nodo de la cadena")
-    parser.add_argument("--auth-token", type=str, default=os.environ.get("AI_TORRENT_AUTH_TOKEN"),
+    parser.add_argument("--auth-token", type=str, default=os.environ.get("TOKENTORRENT_AUTH_TOKEN"),
                          help="Secreto compartido del enjambre; si se define, /forward y /callback lo exigen en la cabecera X-Auth-Token")
     parser.add_argument("--host", default="127.0.0.1", help="Interfaz de escucha; fuera de localhost exige TLS")
     parser.add_argument("--enable-upnp", action="store_true", help="Abre el puerto en el router; requiere autenticación")
@@ -217,11 +217,11 @@ async def main():
                            help="Falla si el puerto está ocupado en vez de buscar el siguiente libre")
 
     tls_group = parser.add_argument_group("TLS / mTLS")
-    tls_group.add_argument("--tls-cert", type=str, default=os.environ.get("AI_TORRENT_TLS_CERT"),
+    tls_group.add_argument("--tls-cert", type=str, default=os.environ.get("TOKENTORRENT_TLS_CERT"),
                            help="Certificado del nodo en PEM (ver src/gen_certs.py)")
-    tls_group.add_argument("--tls-key", type=str, default=os.environ.get("AI_TORRENT_TLS_KEY"),
+    tls_group.add_argument("--tls-key", type=str, default=os.environ.get("TOKENTORRENT_TLS_KEY"),
                            help="Clave privada del nodo en PEM")
-    tls_group.add_argument("--tls-ca", type=str, default=os.environ.get("AI_TORRENT_TLS_CA"),
+    tls_group.add_argument("--tls-ca", type=str, default=os.environ.get("TOKENTORRENT_TLS_CA"),
                            help="Certificado de la CA del enjambre")
     tls_group.add_argument("--no-client-cert", action="store_true",
                            help="Acepta clientes sin certificado (TLS simple en vez de mTLS)")
@@ -229,7 +229,7 @@ async def main():
                            help="Permite escuchar fuera de localhost sin TLS. El tráfico y el token viajan en claro.")
 
     routing_group = parser.add_argument_group("Enrutamiento")
-    routing_group.add_argument("--tracker-key", type=str, default=os.environ.get("AI_TORRENT_TRACKER_KEY"),
+    routing_group.add_argument("--tracker-key", type=str, default=os.environ.get("TOKENTORRENT_TRACKER_KEY"),
                                help="Clave pública Ed25519 del tracker para validar rutas firmadas")
     routing_group.add_argument("--allow-unsigned-routes", action="store_true",
                                help="Acepta rutas sin firmar hacia destinos remotos (riesgo de SSRF)")
