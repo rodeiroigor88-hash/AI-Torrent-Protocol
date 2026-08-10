@@ -5,6 +5,8 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-AI-orange)
 ![Status](https://img.shields.io/badge/Status-Beta-brightgreen)
 
+> **Nota:** este proyecto se llamaba anteriormente *AI Torrent Protocol*. Es el mismo proyecto, el mismo autor y el mismo repositorio; solo cambió el nombre.
+
 **TokenTorrent** es un ecosistema descentralizado (P2P) de código abierto diseñado para democratizar la Inteligencia Artificial. Al igual que BitTorrent revolucionó el intercambio de archivos, este protocolo permite a múltiples usuarios de bajos recursos unir su memoria RAM y CPU para ejecutar Modelos de Lenguaje Masivos (LLMs) de forma colectiva y gratuita.
 
 Diseñado por [**rodeiroigor88**](https://github.com/rodeiroigor88).
