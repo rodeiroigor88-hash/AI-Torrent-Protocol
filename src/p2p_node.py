@@ -17,7 +17,7 @@ import socket
 # Importamos las utilidades que creamos
 from .tensor_utils import MAX_COMPRESSED_BYTES, serialize_tensor, deserialize_tensor
 from . import routing
-from .config import DEFAULTS, tracker_url as configured_tracker_url
+from .config import DEFAULTS, tracker_token as configured_tracker_token, tracker_url as configured_tracker_url
 from .ratelimit import ATTEST_BURST, ATTEST_RATE, RateLimiter
 from .routing import RouteError
 from .pow_utils import (
@@ -719,7 +719,14 @@ class P2PNode:
         }
         try:
             session = self._get_client_session()
-            async with session.post(f"{self.tracker_url}/register", json=payload) as resp:
+            headers = {}
+            tracker_token = configured_tracker_token()
+            if tracker_token:
+                headers["X-Node-Token"] = tracker_token
+            request_kwargs = {"json": payload}
+            if headers:
+                request_kwargs["headers"] = headers
+            async with session.post(f"{self.tracker_url}/register", **request_kwargs) as resp:
                 await resp.read()
                 if resp.status == 200:
                     return 'ok'

@@ -18,7 +18,7 @@ import aiohttp
 
 from src.tensor_utils import MAX_COMPRESSED_BYTES, serialize_tensor, deserialize_tensor
 from src import routing
-from src.config import load_config, tracker_url as configured_tracker_url
+from src.config import load_config, tracker_token as configured_tracker_token, tracker_url as configured_tracker_url
 from src.pow_utils import DEFAULT_EPSILON, outputs_match, relative_l2
 from src.tls_utils import (
     build_client_ssl_context,
@@ -304,7 +304,14 @@ class AgenticChat:
         if exclude:
             params["exclude"] = ",".join(sorted(x for x in exclude if x))
         try:
-            async with self.session.get(f"{self.tracker_url}/plan", params=params) as resp:
+            headers = {}
+            tracker_token = configured_tracker_token()
+            if tracker_token:
+                headers["X-Node-Token"] = tracker_token
+            request_kwargs = {"params": params}
+            if headers:
+                request_kwargs["headers"] = headers
+            async with self.session.get(f"{self.tracker_url}/plan", **request_kwargs) as resp:
                 if resp.status != 200:
                     logger.warning(f"[Cliente] El tracker no pudo planificar la ruta ({resp.status}).")
                     return None
@@ -331,8 +338,14 @@ class AgenticChat:
     async def _legacy_route(self):
         """Compatibilidad: el tracker antiguo solo devolvia una lista de nodos."""
         try:
-            async with self.session.get(f"{self.tracker_url}/route",
-                                        params={"model_arch": self.model_arch}) as resp:
+            headers = {}
+            tracker_token = configured_tracker_token()
+            if tracker_token:
+                headers["X-Node-Token"] = tracker_token
+            request_kwargs = {"params": {"model_arch": self.model_arch}}
+            if headers:
+                request_kwargs["headers"] = headers
+            async with self.session.get(f"{self.tracker_url}/route", **request_kwargs) as resp:
                 if resp.status != 200:
                     return None
                 data = await resp.json()
@@ -522,11 +535,18 @@ class AgenticChat:
 
     async def _report_audit_failure(self, node_ids, divergence):
         try:
-            async with self.session.post(
-                f"{self.tracker_url}/report",
-                json={"nodes": [n for n in node_ids if n], "divergence": divergence,
-                      "model_arch": self.model_arch, "reporter": self.node_id},
-            ) as resp:
+            request_kwargs = {
+                "json": {
+                    "nodes": [n for n in node_ids if n],
+                    "divergence": divergence,
+                    "model_arch": self.model_arch,
+                    "reporter": self.node_id,
+                }
+            }
+            tracker_token = configured_tracker_token()
+            if tracker_token:
+                request_kwargs["headers"] = {"X-Node-Token": tracker_token}
+            async with self.session.post(f"{self.tracker_url}/report", **request_kwargs) as resp:
                 await resp.read()
         except Exception as exc:
             logger.warning(f"[Auditoría] No se pudo reportar al tracker: {exc}")

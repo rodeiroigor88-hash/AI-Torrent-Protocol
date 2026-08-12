@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TRACKER_URL = "https://jarvis.supercores.host/tokentorrent"
+DEFAULT_TRACKER_URL = "https://tokentorrent.es/v1/tokentorrent/tracker"
 
 DEFAULTS = {
     # Interfaz
@@ -166,3 +166,8 @@ def tracker_url() -> str:
     if from_env:
         return _clean_tracker_url(from_env, DEFAULT_TRACKER_URL)
     return load_config()["tracker_url"]
+
+
+def tracker_token() -> str:
+    """Token de enrollment del tracker, solo desde variable de entorno."""
+    return os.environ.get("TOKENTORRENT_NODE_SECRET", "").strip()
