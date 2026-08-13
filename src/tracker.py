@@ -47,6 +47,16 @@ REGISTER_RATE, REGISTER_BURST = 2.0, 10.0
 PLAN_RATE, PLAN_BURST = 5.0, 30.0
 REPORT_RATE, REPORT_BURST = 0.5, 5.0
 
+# Los cuerpos que aceptamos son diminutos (register/report < 4 KB). El default
+# de aiohttp (1 MiB) es un vector de agotamiento de memoria innecesario.
+MAX_REQUEST_BYTES = 32 * 1024
+
+# Campos libres del /register: si no se acotan, un nodo malicioso puede
+# rellenar el registro con strings gigantescos.
+MAX_MODEL_ARCH_LEN = 64
+MAX_MODEL_NAME_LEN = 128
+MAX_LAYERS_LEN = 32
+
 
 def _parse_layers(raw):
     """'8-15' -> (8, 15). Devuelve None si no tiene ese formato."""
@@ -64,10 +74,16 @@ def _parse_layers(raw):
 
 class Tracker:
     def __init__(self, signing_key=None, node_timeout: float = NODE_TIMEOUT,
-                 time_source=time.time):
+                 time_source=time.time, allow_private_callbacks: bool = False):
         self.signing_key = signing_key
         self.node_timeout = node_timeout
         self._time = time_source
+        # Un tracker publico jamas debe firmar un callback que apunte a
+        # rangos loopback/privados/link-local: convertiria al enjambre en un
+        # amplificador SSRF contra servicios internos (incluida la IP de
+        # metadatos de nube 169.254.169.254). En un tracker local de pruebas
+        # ese callback es legitimo, asi que se puede relajar explicitamente.
+        self.allow_private_callbacks = bool(allow_private_callbacks)
         self.nodes = {}
         self.reports = {}
 
@@ -75,14 +91,14 @@ class Tracker:
         self.plan_limiter = RateLimiter(PLAN_RATE, PLAN_BURST)
         self.report_limiter = RateLimiter(REPORT_RATE, REPORT_BURST)
 
-        self.app = web.Application()
+        self.app = web.Application(client_max_size=MAX_REQUEST_BYTES)
         self.app.router.add_post('/register', self.handle_register)
         self.app.router.add_get('/plan', self.handle_plan)
         self.app.router.add_get('/route', self.handle_route)
         self.app.router.add_post('/report', self.handle_report)
         self.app.router.add_get('/status', self.handle_status)
 
-    # ------------------------------------------------------------- utilidades
+    # -------------------------------------------------------------- utilidades
 
     def _throttle(self, request, limiter):
         identity = request.remote or "desconocido"
@@ -156,11 +172,20 @@ class Tracker:
 
         try:
             body = await request.json()
+        except web.HTTPRequestEntityTooLarge:
+            # aiohttp lanza esta excepcion cuando el cuerpo excede
+            # `client_max_size`; degradar a 400 ocultaria el motivo real.
+            return web.json_response({"error": "cuerpo demasiado grande"}, status=413)
         except Exception:
             return web.json_response({"error": "invalid json"}, status=400)
 
         node_id = body.get("node_id")
-        layers = _parse_layers(body.get("layers"))
+        raw_layers = body.get("layers")
+        # Un string larguisimo en `layers` obligaria a `_parse_layers` a fallar
+        # tras trabajar sobre el; mejor cortar en la puerta.
+        if isinstance(raw_layers, str) and len(raw_layers) > MAX_LAYERS_LEN:
+            return web.json_response({"error": "rango de capas invalido"}, status=400)
+        layers = _parse_layers(raw_layers)
         port = body.get("port")
         if not isinstance(node_id, str) or not 0 < len(node_id) <= 128:
             return web.json_response({"error": "node_id invalido"}, status=400)
@@ -168,6 +193,14 @@ class Tracker:
             return web.json_response({"error": "rango de capas invalido"}, status=400)
         if not isinstance(port, int) or not 0 < port <= 65535:
             return web.json_response({"error": "puerto invalido"}, status=400)
+
+        model_arch = body.get("model_arch") or "unknown"
+        if not isinstance(model_arch, str) or len(model_arch) > MAX_MODEL_ARCH_LEN:
+            return web.json_response({"error": "model_arch invalido"}, status=400)
+        model_name = body.get("model_name")
+        if model_name is not None and (
+                not isinstance(model_name, str) or len(model_name) > MAX_MODEL_NAME_LEN):
+            return web.json_response({"error": "model_name invalido"}, status=400)
 
         scheme = body.get("scheme") if body.get("scheme") in ("http", "https") else "http"
         # La IP anunciada por el nodo puede ser una IP privada inservible o una
@@ -185,12 +218,12 @@ class Tracker:
             "ip": host,
             "port": port,
             "scheme": scheme,
-            "layers": body.get("layers"),
+            "layers": raw_layers,
             "start_layer": layers[0],
             "end_layer": layers[1],
             "is_last": bool(body.get("is_last")),
-            "model_arch": body.get("model_arch") or "unknown",
-            "model_name": body.get("model_name"),
+            "model_arch": model_arch,
+            "model_name": model_name,
             "hidden_size": body.get("hidden_size"),
             "tls": bool(body.get("tls")),
             "paused": bool(body.get("paused")),
@@ -228,6 +261,16 @@ class Tracker:
             callback_hop = routing.normalize_endpoint(callback, "/callback")
         except routing.RouteError as exc:
             return web.json_response({"error": f"callback invalido: {exc}"}, status=400)
+        # Un tracker publico jamas firma un callback que apunte a rangos que el
+        # atacante usaria para amplificar contra la red interna: loopback,
+        # RFC1918, link-local (incluida la IP de metadatos de nube).
+        if not self.allow_private_callbacks:
+            callback_host = urlsplit(callback_hop).hostname or ""
+            if not routing.hostname_is_public_safe(callback_host):
+                logger.warning("Callback rechazado por SSRF: %s", callback_hop)
+                return web.json_response(
+                    {"error": "callback invalido: el host apunta a un rango no publico"},
+                    status=400)
         callback_node_id = request.query.get("callback_node_id") or ""
 
         route = self.plan_route(model_arch, start_layer, exclude)
@@ -264,6 +307,8 @@ class Tracker:
             return throttled
         try:
             body = await request.json()
+        except web.HTTPRequestEntityTooLarge:
+            return web.json_response({"error": "cuerpo demasiado grande"}, status=413)
         except Exception:
             return web.json_response({"error": "invalid json"}, status=400)
 
@@ -304,6 +349,9 @@ def main():
     parser.add_argument("--signing-key", default=None,
                         help="Clave privada Ed25519 para firmar rutas (src/gen_certs.py tracker-key)")
     parser.add_argument("--node-timeout", type=float, default=NODE_TIMEOUT)
+    parser.add_argument("--allow-private-callbacks", action="store_true",
+                        help="Permite callbacks a loopback/RFC1918/link-local. Solo para "
+                             "trackers locales de pruebas: en publico habilita SSRF.")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -319,7 +367,10 @@ def main():
         logger.warning("Sin --signing-key: las rutas van SIN FIRMAR y solo las aceptaran "
                        "nodos en loopback o arrancados con --allow-unsigned-routes.")
 
-    tracker = Tracker(signing_key=signing_key, node_timeout=args.node_timeout)
+    tracker = Tracker(signing_key=signing_key, node_timeout=args.node_timeout,
+                      allow_private_callbacks=args.allow_private_callbacks)
+    if args.allow_private_callbacks:
+        logger.warning("--allow-private-callbacks activo: solo apto para pruebas locales.")
     logger.info("Tracker escuchando en http://%s:%s (timeout de nodo: %.0fs)",
                 args.host, args.port, args.node_timeout)
     web.run_app(tracker.app, host=args.host, port=args.port, print=None)
