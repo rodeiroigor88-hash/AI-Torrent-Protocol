@@ -1,0 +1,22 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install runtime deps sin torch/transformers (suite ligera de CI)
+        run: |
+          pip install aiohttp msgpack cryptography pytest
+      - name: pytest tracker + routing + rate limit
+        run: |
+          pytest -q tests/test_tracker.py tests/test_routing.py
