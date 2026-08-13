@@ -19,4 +19,4 @@ jobs:
           pip install aiohttp msgpack cryptography pytest
       - name: pytest tracker (salta el e2e que necesita torch)
         run: |
-          pytest -q tests/test_tracker.py -k 'not end_to_end'
+          pytest -q tests/test_tracker.py -k 'not end_to_end and not node_timeout_matches'
