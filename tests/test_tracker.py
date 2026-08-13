@@ -45,10 +45,18 @@ def heartbeat(node_id, layers, is_last=False, port=8001, arch="llama/qwen", **ex
     return payload
 
 
-def run_tracker_test(scenario, signing_key=None, node_timeout=NODE_TIMEOUT):
-    """Levanta el tracker y ejecuta `scenario(client, tracker, clock)`."""
+def run_tracker_test(scenario, signing_key=None, node_timeout=NODE_TIMEOUT,
+                     allow_private_callbacks=True):
+    """Levanta el tracker y ejecuta `scenario(client, tracker, clock)`.
+
+    Por defecto se permiten callbacks a loopback: los escenarios existentes
+    usan `http://127.0.0.1:...` para poder correr sin red. Los tests
+    especificos de la proteccion SSRF crean el tracker con
+    ``allow_private_callbacks=False`` a mano.
+    """
     clock = FakeClock()
-    tracker = Tracker(signing_key=signing_key, node_timeout=node_timeout, time_source=clock)
+    tracker = Tracker(signing_key=signing_key, node_timeout=node_timeout, time_source=clock,
+                      allow_private_callbacks=allow_private_callbacks)
 
     async def runner():
         server = TestServer(tracker.app)
@@ -310,6 +318,86 @@ def test_status_endpoint_summarizes_the_swarm():
 def test_node_timeout_matches_three_missed_heartbeats():
     from src.p2p_node import HEARTBEAT_INTERVAL
     assert NODE_TIMEOUT == pytest.approx(HEARTBEAT_INTERVAL * 3)
+
+
+# --------------------------------------------------------------- SSRF y limites
+
+def test_public_tracker_refuses_callback_to_private_ranges():
+    """Un tracker publico no debe firmar un callback contra rangos internos:
+    ese es el vector para convertir al enjambre en un amplificador SSRF."""
+    async def scenario(client, tracker, clock):
+        await register(client, node_id="a", layers="8-15", port=8001, is_last=True)
+        for host in (
+            "127.0.0.1",              # loopback
+            "10.0.0.5",               # RFC1918
+            "192.168.1.10",           # RFC1918
+            "172.16.0.9",             # RFC1918
+            "169.254.169.254",        # metadatos de nube (AWS/GCP/Azure)
+            "localhost",              # nombre reservado
+            "0.0.0.0",                # no especificado
+            "::1",                    # loopback IPv6
+            "fe80::1",                # link-local IPv6
+        ):
+            callback = f"http://{host}:8000/callback"
+            response = await client.get("/plan",
+                                        params={"start_layer": "8", "callback": callback})
+            assert response.status == 400, f"{host} deberia rechazarse"
+
+    run_tracker_test(scenario, allow_private_callbacks=False)
+
+
+def test_public_tracker_accepts_callback_to_public_hosts():
+    async def scenario(client, tracker, clock):
+        await register(client, node_id="a", layers="8-15", port=8001, is_last=True)
+        # IP publica de verdad y nombre de dominio: aceptados sin resolver DNS.
+        # (Los bloques TEST-NET RFC5737 caen bajo is_private en Python, asi que
+        # no sirven como ejemplo de "publico".)
+        for callback in ("http://8.8.8.8:8000/callback",
+                         "https://api.tokentorrent.example/callback"):
+            response = await client.get("/plan",
+                                        params={"start_layer": "8", "callback": callback})
+            assert response.status == 200, callback
+
+    run_tracker_test(scenario, allow_private_callbacks=False)
+
+
+def test_local_tracker_can_opt_in_to_private_callbacks():
+    """Un tracker local de pruebas necesita callbacks loopback: la salida
+    de emergencia debe ser explicita, no por defecto."""
+    async def scenario(client, tracker, clock):
+        await register(client, node_id="a", layers="8-15", port=8001, is_last=True)
+        assert (await client.get("/plan", params={
+            "start_layer": "8", "callback": CALLBACK})).status == 200
+
+    run_tracker_test(scenario, allow_private_callbacks=True)
+
+
+def test_register_rejects_oversized_strings():
+    """Un nodo malicioso no debe poder llenar el registro con strings gigantes."""
+    async def scenario(client, tracker, clock):
+        base = {"node_id": "a", "layers": "8-15", "port": 8001}
+        for payload in (
+            {**base, "model_arch": "x" * 200},
+            {**base, "model_name": "x" * 500},
+            {**base, "layers": "8-" + "9" * 40},
+        ):
+            response = await client.post("/register", json=payload)
+            assert response.status == 400, payload
+
+    run_tracker_test(scenario)
+
+
+def test_register_rejects_oversized_body():
+    """El default de aiohttp (1 MiB) es un vector de agotamiento de memoria
+    innecesario cuando los payloads legitimos son <4 KB."""
+    async def scenario(client, tracker, clock):
+        # Un body de ~64 KiB supera holgadamente MAX_REQUEST_BYTES=32 KiB.
+        payload = {"node_id": "a", "layers": "8-15", "port": 8001,
+                   "model_arch": "llama/qwen", "padding": "x" * (64 * 1024)}
+        response = await client.post("/register", json=payload)
+        assert response.status == 413
+
+    run_tracker_test(scenario)
 
 
 # ------------------------------------------------------------ integración

@@ -67,6 +67,31 @@ def _hostname_is_loopback(hostname: str) -> bool:
         return False
 
 
+def hostname_is_public_safe(hostname: str) -> bool:
+    """True si el hostname parece un destino publico legitimo.
+
+    Rechaza literales IP que caen en rangos que un tracker publico NUNCA
+    deberia firmar como callback: loopback, RFC1918, link-local (incluida la
+    IP de metadatos de nube 169.254.169.254), multicast, reservados y no
+    especificados. Para nombres de dominio devuelve True: la resolucion se
+    delega al momento de conexion (resolver en el tracker abre DNS rebinding
+    y bloquea el event loop). Es una defensa en profundidad; el worker sigue
+    siendo responsable de sus propias comprobaciones al enviar.
+    """
+    if not hostname:
+        return False
+    if hostname in ("localhost", "localhost.localdomain"):
+        return False
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Es un nombre de dominio. No resolvemos aqui a proposito.
+        return True
+    # `is_global` cubre loopback, privadas, link-local, multicast, reservadas,
+    # site-local IPv6 y unspecified de una sola vez.
+    return bool(addr.is_global)
+
+
 def route_is_loopback_only(route) -> bool:
     for entry in route:
         url = hop_url(entry)
