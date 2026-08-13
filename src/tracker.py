@@ -97,6 +97,7 @@ class Tracker:
         self.app.router.add_get('/route', self.handle_route)
         self.app.router.add_post('/report', self.handle_report)
         self.app.router.add_get('/status', self.handle_status)
+        self.app.router.add_get('/health', self.handle_health)
 
     # -------------------------------------------------------------- utilidades
 
@@ -338,6 +339,21 @@ class Tracker:
                 for node in sorted(self.nodes.values(), key=lambda item: item["start_layer"])
             ],
             "flagged": self.reports,
+            "node_timeout": self.node_timeout,
+        })
+
+
+    async def handle_health(self, request):
+        """Endpoint ligero para monitores externos.
+
+        Deliberadamente no revela IDs de nodos ni IPs (para eso esta /status,
+        que debe quedar protegido en produccion). Devuelve solo si el proceso
+        responde y un contador aproximado de nodos activos.
+        """
+        self.prune()
+        return web.json_response({
+            "status": "ok",
+            "nodes": len(self.nodes),
             "node_timeout": self.node_timeout,
         })
 
