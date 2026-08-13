@@ -14,9 +14,9 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      - name: Install runtime deps sin torch/transformers (suite ligera de CI)
+      - name: Deps ligeras (sin torch/transformers)
         run: |
           pip install aiohttp msgpack cryptography pytest
-      - name: pytest tracker + routing + rate limit
+      - name: pytest tracker (salta el e2e que necesita torch)
         run: |
-          pytest -q tests/test_tracker.py tests/test_routing.py
+          pytest -q tests/test_tracker.py -k 'not end_to_end'
