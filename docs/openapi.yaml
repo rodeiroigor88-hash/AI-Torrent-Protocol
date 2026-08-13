@@ -1,0 +1,132 @@
+openapi: 3.1.0
+info:
+  title: TokenTorrent Tracker API
+  version: 1.0.0
+  description: |
+    Contrato del tracker de referencia del enjambre TokenTorrent
+    (src/tracker.py). El tracker acepta latidos de nodos, planifica cadenas
+    firmadas de layers y expone health/status.
+
+    IMPORTANTE: los endpoints `/admin/*` que existen en el tracker de
+    produccion (`jarvis.supercores.host`) NO son parte de esta API publica.
+    Requieren autenticacion server-to-server (bearer token) y estan fuera
+    del alcance de este spec.
+servers:
+  - url: https://jarvis.supercores.host
+    description: Tracker en produccion (JARVIS)
+  - url: http://127.0.0.1:5000
+    description: Tracker local de referencia (src/tracker.py)
+tags:
+  - name: swarm
+    description: Registro y planificacion de rutas
+  - name: audit
+    description: Reporte de divergencias y estado
+  - name: health
+    description: Endpoints para monitores externos
+paths:
+  /register:
+    post:
+      tags: [swarm]
+      summary: Latido de un nodo
+      description: |
+        Registra o refresca un nodo del enjambre. El nodo debe latir cada
+        `HEARTBEAT_INTERVAL` (15s) o sera evictado tras `NODE_TIMEOUT` (45s).
+        La IP se toma de la conexion, no del body (`ip` solo se acepta si
+        empieza por `127.` para pruebas locales).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Heartbeat'
+      responses:
+        '200': { $ref: '#/components/responses/RegisterOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/BodyTooLarge' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/RegistryFull' }
+  /health:
+    get:
+      tags: [health]
+      summary: Health check ligero para monitores externos
+      description: |
+        No revela node_ids ni IPs; solo dice si el proceso responde y un
+        contador aproximado de nodos activos.
+      responses:
+        '200':
+          description: Tracker operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, example: ok }
+                  nodes: { type: integer, description: Nodos registrados }
+                  node_timeout: { type: number, example: 45.0 }
+components:
+  schemas:
+    Heartbeat:
+      type: object
+      required: [node_id, layers, port]
+      properties:
+        node_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        layers:
+          type: string
+          pattern: '^\d+-\d+$'
+          maxLength: 32
+          example: '8-15'
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        is_last: { type: boolean, default: false }
+        model_arch:
+          type: string
+          maxLength: 64
+          example: llama/qwen
+        model_name:
+          type: string
+          maxLength: 128
+          nullable: true
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+  responses:
+    RegisterOk:
+      description: Latido aceptado
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string, example: ok }
+              expires_in: { type: number, description: Segundos, example: 45.0 }
+    BadRequest:
+      description: JSON malformado o campos invalidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    BodyTooLarge:
+      description: Cuerpo excede `MAX_REQUEST_BYTES` (32 KiB)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TooManyRequests:
+      description: Rate limit por IP superado
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RegistryFull:
+      description: Registro lleno (>= MAX_NODES)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
