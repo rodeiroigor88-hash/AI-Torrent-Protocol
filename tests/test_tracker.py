@@ -316,7 +316,7 @@ def test_status_endpoint_summarizes_the_swarm():
 
 
 def test_node_timeout_matches_three_missed_heartbeats():
-    from src.p2p_node import HEARTBEAT_INTERVAL
+    from src.config import HEARTBEAT_INTERVAL
     assert NODE_TIMEOUT == pytest.approx(HEARTBEAT_INTERVAL * 3)
 
 

@@ -61,8 +61,9 @@ def _hostname_is_loopback(hostname: str) -> bool:
     """
     if hostname in ("localhost", "localhost.localdomain"):
         return True
+    clean_host = hostname.strip("[]")
     try:
-        return ipaddress.ip_address(hostname).is_loopback
+        return ipaddress.ip_address(clean_host).is_loopback
     except ValueError:
         return False
 
@@ -82,14 +83,19 @@ def hostname_is_public_safe(hostname: str) -> bool:
         return False
     if hostname in ("localhost", "localhost.localdomain"):
         return False
+    clean_host = hostname.strip("[]")
     try:
-        addr = ipaddress.ip_address(hostname)
+        addr = ipaddress.ip_address(clean_host)
+        # `is_global` cubre loopback, privadas, link-local, multicast, reservadas,
+        # site-local IPv6 y unspecified de una sola vez.
+        return bool(addr.is_global)
     except ValueError:
-        # Es un nombre de dominio. No resolvemos aqui a proposito.
+        # Si contiene ':' (como IPv6 sin corchetes o mal formado) o no contiene '.'
+        # (nombres de una sola etiqueta como NetBIOS, mDNS o 'fe80'), no es un FQDN publico valido.
+        if ":" in hostname or "." not in hostname:
+            return False
+        # Es un nombre de dominio calificado (FQDN). No resolvemos aqui a proposito.
         return True
-    # `is_global` cubre loopback, privadas, link-local, multicast, reservadas,
-    # site-local IPv6 y unspecified de una sola vez.
-    return bool(addr.is_global)
 
 
 def route_is_loopback_only(route) -> bool:

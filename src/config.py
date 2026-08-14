@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TRACKER_URL = "https://tokentorrent.es/v1/tokentorrent/tracker"
 
+# 15 s de latido para que el tracker pueda expulsar a un nodo fantasma a los
+# 45 s (tres latidos perdidos) sin desconectar a nodos sanos por un fallo suelto.
+HEARTBEAT_INTERVAL = 15
+
 DEFAULTS = {
     # Interfaz
     "hotkey": "f12",

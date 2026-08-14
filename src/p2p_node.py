@@ -11,13 +11,17 @@ import ipaddress
 import time
 from collections import OrderedDict
 from urllib.parse import urlsplit
-
 import socket
 
 # Importamos las utilidades que creamos
 from .tensor_utils import MAX_COMPRESSED_BYTES, serialize_tensor, deserialize_tensor
 from . import routing
-from .config import DEFAULTS, tracker_token as configured_tracker_token, tracker_url as configured_tracker_url
+from .config import (
+    DEFAULTS,
+    HEARTBEAT_INTERVAL,
+    tracker_token as configured_tracker_token,
+    tracker_url as configured_tracker_url,
+)
 from .ratelimit import ATTEST_BURST, ATTEST_RATE, RateLimiter
 from .routing import RouteError
 from .pow_utils import (
@@ -40,9 +44,6 @@ from .tls_utils import (
 
 logger = logging.getLogger(__name__)
 
-# 15 s de latido para que el tracker pueda expulsar a un nodo fantasma a los
-# 45 s (tres latidos perdidos) sin desconectar a nodos sanos por un fallo suelto.
-HEARTBEAT_INTERVAL = 15
 MAX_HEARTBEAT_BACKOFF = 300
 # Cuantos puertos consecutivos se prueban si el configurado esta ocupado.
 PORT_FALLBACK_ATTEMPTS = 10
