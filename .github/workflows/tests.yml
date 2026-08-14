@@ -17,6 +17,12 @@ jobs:
       - name: Deps ligeras (sin torch/transformers)
         run: |
           pip install aiohttp msgpack cryptography pytest
-      - name: pytest tracker (salta el e2e que necesita torch)
+      - name: pytest suite ligera y e2e del tracker
         run: |
-          pytest -q tests/test_tracker.py -k 'not end_to_end'
+          pytest -q tests/test_client_routing.py tests/test_config_qos.py \
+            tests/test_protocol.py tests/test_routing.py tests/test_tls_pow.py \
+            tests/test_tracker.py
+      - name: Auditoría de dependencias Python
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --strict

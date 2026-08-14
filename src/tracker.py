@@ -19,6 +19,7 @@ Endpoints:
 """
 
 import argparse
+import ipaddress
 import logging
 import os
 import sys
@@ -369,6 +370,16 @@ def main():
                         help="Permite callbacks a loopback/RFC1918/link-local. Solo para "
                              "trackers locales de pruebas: en publico habilita SSRF.")
     args = parser.parse_args()
+
+    try:
+        bind_addr = ipaddress.ip_address(args.host)
+        is_loopback = bind_addr.is_loopback
+    except ValueError:
+        is_loopback = args.host in ('localhost', 'localhost.localdomain')
+    if not is_loopback and not args.signing_key:
+        parser.error('un tracker no local necesita --signing-key')
+    if not is_loopback and args.allow_private_callbacks:
+        parser.error('--allow-private-callbacks solo se permite en loopback')
 
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - [%(levelname)s] - %(message)s')

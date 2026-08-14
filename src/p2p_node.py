@@ -552,6 +552,15 @@ class P2PNode:
         return kwargs
 
     async def _post(self, url: str, node_id: str, payload: bytes) -> int:
+        parsed = urlsplit(url)
+        if parsed.scheme != 'https':
+            try:
+                host = ipaddress.ip_address(parsed.hostname or '')
+                is_loopback = host.is_loopback
+            except ValueError:
+                is_loopback = parsed.hostname in ('localhost', 'localhost.localdomain')
+            if not is_loopback:
+                raise RouteError('Los saltos remotos deben usar HTTPS')
         headers = {'Content-Type': 'application/msgpack'}
         if self.auth_token:
             headers['X-Auth-Token'] = self.auth_token

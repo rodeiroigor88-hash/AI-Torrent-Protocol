@@ -18,7 +18,11 @@ from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TRACKER_URL = "https://tokentorrent.es/v1/tokentorrent/tracker"
+# A production tracker must be supplied explicitly. The old public URL was a
+# redirecting placeholder and caused nodes to silently enroll against a 404.
+# Keep local development deterministic and require deployment configuration for
+# any real swarm.
+DEFAULT_TRACKER_URL = "http://127.0.0.1:5000"
 
 # 15 s de latido para que el tracker pueda expulsar a un nodo fantasma a los
 # 45 s (tres latidos perdidos) sin desconectar a nodos sanos por un fallo suelto.
