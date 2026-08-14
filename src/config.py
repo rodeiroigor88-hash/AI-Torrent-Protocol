@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # redirecting placeholder and caused nodes to silently enroll against a 404.
 # Keep local development deterministic and require deployment configuration for
 # any real swarm.
-DEFAULT_TRACKER_URL = "http://127.0.0.1:5000"
+DEFAULT_TRACKER_URL = "https://api.tokentorrent.es/ai-torrent"
 
 # 15 s de latido para que el tracker pueda expulsar a un nodo fantasma a los
 # 45 s (tres latidos perdidos) sin desconectar a nodos sanos por un fallo suelto.
