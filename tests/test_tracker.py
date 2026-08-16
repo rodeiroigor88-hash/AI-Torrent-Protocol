@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src import routing
 from src import tracker as tracker_module
+from src.reputation import QUARANTINE_BASE_SECONDS
 from src.tracker import NODE_TIMEOUT, Tracker
 
 
@@ -251,6 +252,67 @@ def test_report_rejects_an_oversized_node_list():
     async def scenario(client, tracker, clock):
         response = await client.post("/report", json={"nodes": ["x"] * 100})
         assert response.status == 400
+
+    run_tracker_test(scenario)
+
+
+# ----------------------------------------------- CAPA 2: reputacion y latencia
+
+def test_plan_prefers_the_lower_latency_node():
+    """Ante dos nodos que cubren el mismo rango, gana el de menor latencia,
+    aunque el mas lento haya latido mas recientemente."""
+    async def scenario(client, tracker, clock):
+        # "fast" se registra primero; "slow" despues (latido mas reciente).
+        await register(client, node_id="fast", layers="8-15", port=8001, latency_ms=30)
+        await register(client, node_id="slow", layers="8-15", port=8011, latency_ms=400)
+        await register(client, node_id="b", layers="16-23", port=8002, is_last=True)
+
+        data = await (await client.get("/plan", params={
+            "start_layer": "8", "callback": CALLBACK})).json()
+        assert routing.hop_node_id(data["route"][0]) == "fast", \
+            "el score por latencia debe imponerse a la recencia del latido"
+
+    run_tracker_test(scenario)
+
+
+def test_quarantine_expires_and_the_node_returns():
+    """La penalizacion es cuarentena con backoff, no un veto permanente: pasado
+    el tiempo el nodo vuelve a ser enrutable (rehabilitacion)."""
+    async def scenario(client, tracker, clock):
+        await register(client, node_id="a", layers="8-15", port=8001)
+        await register(client, node_id="b", layers="16-23", port=8002, is_last=True)
+
+        # Reporte por timeout: el unico nodo 8-15 entra en cuarentena.
+        assert (await client.post("/report",
+                                  json={"nodes": ["a"], "reason": "timeout"})).status == 200
+        assert (await client.get("/plan", params={
+            "start_layer": "8", "callback": CALLBACK})).status == 404, "en cuarentena"
+
+        # Pasado el backoff (y con un latido fresco que evita la expulsion por
+        # fantasma), el nodo vuelve a estar disponible.
+        clock.advance(QUARANTINE_BASE_SECONDS + 1)
+        await register(client, node_id="a", layers="8-15", port=8001)
+        await register(client, node_id="b", layers="16-23", port=8002, is_last=True)
+        assert (await client.get("/plan", params={
+            "start_layer": "8", "callback": CALLBACK})).status == 200, "rehabilitado"
+
+    run_tracker_test(scenario)
+
+
+def test_status_exposes_score_latency_and_quarantine():
+    async def scenario(client, tracker, clock):
+        await register(client, node_id="a", layers="8-15", port=8001, latency_ms=120,
+                       donated_cores=4, donated_ram_mb=4096)
+        body = await (await client.get("/status")).json()
+        node = body["nodes"][0]
+        assert 0.0 < node["score"] <= 1.0
+        assert node["latency_ms"] == 120.0
+        assert node["quarantined"] is False
+
+        await client.post("/report", json={"nodes": ["a"], "reason": "corrupt"})
+        body = await (await client.get("/status")).json()
+        assert body["nodes"][0]["quarantined"] is True
+        assert body["flagged"] == {"a": 1}
 
     run_tracker_test(scenario)
 

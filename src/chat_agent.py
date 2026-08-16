@@ -18,6 +18,7 @@ import aiohttp
 
 from src.tensor_utils import MAX_COMPRESSED_BYTES, serialize_tensor, deserialize_tensor
 from src import routing
+from src.reputation import REASON_DIVERGENCE, REASON_TIMEOUT
 from src.config import load_config, tracker_token as configured_tracker_token, tracker_url as configured_tracker_url
 from src.pow_utils import DEFAULT_EPSILON, outputs_match, relative_l2
 from src.tls_utils import (
@@ -466,6 +467,9 @@ class AgenticChat:
                 self._invalidate_route(exc.node_id)
             except asyncio.TimeoutError:
                 last_error = PipelineError("Timeout de red")
+                # Penalizacion automatica (CAPA 2): un nodo que no responde a
+                # tiempo se reporta para que el tracker lo ponga en cuarentena.
+                await self._post_report([target_node_id], REASON_TIMEOUT)
                 self._invalidate_route(target_node_id)
             finally:
                 self.pending_requests.pop(request_id, None)
@@ -534,22 +538,41 @@ class AgenticChat:
         return False
 
     async def _report_audit_failure(self, node_ids, divergence):
+        """Reporta una divergencia detectada por la auditoria (Proof of Compute)."""
+        await self._post_report(node_ids, REASON_DIVERGENCE, divergence=divergence)
+
+    async def _post_report(self, node_ids, reason, divergence=None):
+        """Notifica al tracker una anomalia de uno o varios nodos (best-effort).
+
+        El tracker usa el motivo (`divergence`/`timeout`/`corrupt`) para poner al
+        nodo en cuarentena. Nunca propaga excepciones: un fallo al reportar no
+        debe tumbar la generacion en curso.
+
+        :param node_ids: identidades implicadas (las vacias se descartan).
+        :param reason: motivo de la anomalia (ver src/reputation.VALID_REASONS).
+        :param divergence: distancia L2 relativa, solo para reportes de auditoria.
+        """
         try:
-            request_kwargs = {
-                "json": {
-                    "nodes": [n for n in node_ids if n],
-                    "divergence": divergence,
-                    "model_arch": self.model_arch,
-                    "reporter": self.node_id,
-                }
-            }
+            nodes = [n for n in node_ids if n]
+            if not nodes:
+                return
+            session = getattr(self, "session", None)
+            tracker_url = getattr(self, "tracker_url", None)
+            if session is None or not tracker_url:
+                return
+            body = {"nodes": nodes, "reason": reason,
+                    "model_arch": getattr(self, "model_arch", None),
+                    "reporter": getattr(self, "node_id", None)}
+            if divergence is not None:
+                body["divergence"] = divergence
+            request_kwargs = {"json": body}
             tracker_token = configured_tracker_token()
             if tracker_token:
                 request_kwargs["headers"] = {"X-Node-Token": tracker_token}
-            async with self.session.post(f"{self.tracker_url}/report", **request_kwargs) as resp:
+            async with session.post(f"{tracker_url}/report", **request_kwargs) as resp:
                 await resp.read()
         except Exception as exc:
-            logger.warning(f"[Auditoría] No se pudo reportar al tracker: {exc}")
+            logger.warning(f"[Cliente] No se pudo reportar al tracker: {exc}")
 
     # ----------------------------------------------------------- agente
 

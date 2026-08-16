@@ -175,6 +175,11 @@ class P2PNode:
         # [FASE 6.1] KV Cache Distribuido (Memoria Eidetica)
         self.kv_cache = OrderedDict()
         self.max_cache_size = max(0, cache_size)
+
+        # [CAPA 2] Latencia de computo auto-medida (EWMA, ms) que se reporta al
+        # tracker en cada latido para alimentar el enrutamiento por latencia.
+        self._forward_latency_ms = None
+        self._latency_alpha = 0.3
         self._work_semaphore = asyncio.Semaphore(max_concurrency)
         self._background_tasks = set()
         self._client_session = None
@@ -249,6 +254,16 @@ class P2PNode:
             return ipaddress.ip_address(request.remote).is_loopback
         except (TypeError, ValueError):
             return False
+
+    def _observe_forward_latency(self, sample_ms: float) -> None:
+        """Integra la duracion de un forward en la media exponencial (EWMA)."""
+        if sample_ms < 0:
+            return
+        if self._forward_latency_ms is None:
+            self._forward_latency_ms = float(sample_ms)
+        else:
+            self._forward_latency_ms = (self._latency_alpha * float(sample_ms)
+                                        + (1 - self._latency_alpha) * self._forward_latency_ms)
 
     def _start_background_task(self, coroutine):
         task = asyncio.create_task(coroutine)
@@ -394,7 +409,9 @@ class P2PNode:
                     logger.info(f"[Nodo {self.port}] Tensor recibido. Forma: {payload.shape}")
 
                 async with self._work_semaphore:
+                    started = time.perf_counter()
                     processed_payload = await asyncio.to_thread(self.operation, payload)
+                    self._observe_forward_latency((time.perf_counter() - started) * 1000.0)
                 cached = False
 
                 if cache_key is not None:
@@ -727,6 +744,10 @@ class P2PNode:
             "tls": self.tls_enabled,
             "ts": int(time.time()),
         }
+        # Latencia de computo auto-medida (CAPA 2). Se omite hasta tener al menos
+        # una muestra real, para no reportar un 0 enganoso al arrancar.
+        if self._forward_latency_ms is not None:
+            payload["latency_ms"] = round(self._forward_latency_ms, 2)
         try:
             session = self._get_client_session()
             headers = {}
