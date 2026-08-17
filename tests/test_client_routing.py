@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src import chat_agent as chat_agent_module
 from src import routing
 from src.chat_agent import MAX_ROUTE_ATTEMPTS, AgenticChat, PipelineError
+from src.crossverify import AdaptiveSampler
 
 
 def make_client(route=None, next_node_url=None, tls_cert=None):
@@ -182,34 +183,48 @@ def test_reconnect_backoff_is_capped():
     assert max(delays) == chat_agent_module.MAX_RECONNECT_DELAY
 
 
-def _audit_client(candidate):
-    """Cliente con una ruta auditable y una alternativa que devuelve `candidate`."""
+def _crossverify_client(outputs):
+    """Cliente con verificacion cruzada (CAPA 3).
+
+    `outputs` mapea node_id -> tensor que devuelve ese nodo. La ruta primaria es
+    worker-a; las alternativas salen del resto de claves de `outputs` segun las
+    exclusiones, de modo que cada replica es una ruta DISJUNTA e independiente.
+    """
     chat = make_client(route=[{"url": "http://127.0.0.1:9001/forward", "node_id": "worker-a"}])
     chat.audit_probability = 1.0
     chat.audit_epsilon = 1e-3
     chat.audit_stats = {"checked": 0, "mismatches": 0}
     chat._audit_warned = False
+    chat.sampler = AdaptiveSampler()
     reported = []
+    pool = [node_id for node_id in outputs if node_id != "worker-a"]
 
     async def fake_plan_route(exclude=None):
-        chat.route = [{"url": "http://127.0.0.1:9002/forward", "node_id": "worker-b"}]
-        return chat.route
+        exclude = exclude or set()
+        for node_id in pool:
+            if node_id not in exclude:
+                chat.route = [{"url": f"http://127.0.0.1:9000/{node_id}", "node_id": node_id}]
+                return chat.route
+        chat.route = None
+        return None
 
     async def fake_step(hidden_states, position_ids, timeout=30.0):
-        return candidate
+        return outputs[routing.hop_node_id(chat.route[0])]
 
-    async def fake_report(node_ids, divergence):
-        reported.append((list(node_ids), divergence))
+    async def fake_post_report(node_ids, reason, divergence=None):
+        reported.append((list(node_ids), reason))
 
     chat._plan_route = fake_plan_route
     chat._run_pipeline_step = fake_step
-    chat._report_audit_failure = fake_report
+    chat._post_report = fake_post_report
     return chat, reported
 
 
-def test_audit_accepts_a_matching_second_opinion():
+def test_audit_accepts_a_unanimous_verdict():
     reference = torch.ones(1, 1, 8)
-    chat, reported = _audit_client(reference.clone())
+    chat, reported = _crossverify_client({
+        "worker-a": reference, "worker-b": reference.clone(), "worker-c": reference.clone(),
+    })
 
     assert asyncio.run(chat._audit_step(torch.ones(1, 2, 4), torch.zeros(1, 2), reference)) is True
     assert chat.audit_stats == {"checked": 1, "mismatches": 0}
@@ -218,15 +233,36 @@ def test_audit_accepts_a_matching_second_opinion():
     assert routing.hop_node_id(chat.route[0]) == "worker-a"
 
 
-def test_audit_flags_a_diverging_node_and_excludes_it():
-    reference = torch.ones(1, 1, 8)
-    chat, reported = _audit_client(torch.zeros(1, 1, 8))
+def test_audit_attributes_the_divergence_to_the_minority_node():
+    """Dos honestos coinciden; el tramposo minoritario (worker-a) queda senalado
+    SIN castigar a los honestos."""
+    honest = torch.ones(1, 1, 8)
+    cheat = torch.zeros(1, 1, 8)
+    chat, reported = _crossverify_client({
+        "worker-a": cheat, "worker-b": honest, "worker-c": honest.clone(),
+    })
 
-    assert asyncio.run(chat._audit_step(torch.ones(1, 2, 4), torch.zeros(1, 2), reference)) is False
+    assert asyncio.run(chat._audit_step(torch.ones(1, 2, 4), torch.zeros(1, 2), cheat)) is False
     assert chat.audit_stats == {"checked": 1, "mismatches": 1}
-    assert reported and reported[0][0] == ["worker-a"]
+    assert reported and reported[0] == (["worker-a"], "divergence")
     assert "worker-a" in chat.failed_nodes
-    assert chat.route is None, "la ruta con el nodo sospechoso debe descartarse"
+    assert "worker-b" not in chat.failed_nodes, "un honesto no debe ser castigado"
+    assert chat.route is None, "la ruta con el nodo culpable debe descartarse"
+
+
+def test_audit_is_inconclusive_without_a_majority():
+    """Con solo dos opiniones enfrentadas (no hay tercera ruta) no se puede
+    atribuir: se declara inconcluso y NO se castiga a ciegas (mejora sobre la
+    auditoria de una sola alternativa)."""
+    honest = torch.ones(1, 1, 8)
+    cheat = torch.zeros(1, 1, 8)
+    chat, reported = _crossverify_client({"worker-a": cheat, "worker-b": honest})
+
+    assert asyncio.run(chat._audit_step(torch.ones(1, 2, 4), torch.zeros(1, 2), cheat)) is None
+    assert chat.audit_stats == {"checked": 1, "mismatches": 0}
+    assert not reported
+    assert "worker-a" not in chat.failed_nodes
+    assert routing.hop_node_id(chat.route[0]) == "worker-a", "sin culpa clara, la ruta se conserva"
 
 
 def test_audit_is_skipped_without_node_identities():

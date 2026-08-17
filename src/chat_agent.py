@@ -18,9 +18,11 @@ import aiohttp
 
 from src.tensor_utils import MAX_COMPRESSED_BYTES, serialize_tensor, deserialize_tensor
 from src import routing
+from src import crossverify
+from src.crossverify import AdaptiveSampler, VerdictStatus
 from src.reputation import REASON_DIVERGENCE, REASON_TIMEOUT
 from src.config import load_config, tracker_token as configured_tracker_token, tracker_url as configured_tracker_url
-from src.pow_utils import DEFAULT_EPSILON, outputs_match, relative_l2
+from src.pow_utils import DEFAULT_EPSILON, relative_l2
 from src.tls_utils import (
     build_client_ssl_context,
     build_server_ssl_context,
@@ -37,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CLIENT_END_LAYER = 7
 MAX_ROUTE_ATTEMPTS = 3
+# [CAPA 3] Opiniones alternativas (ademas de la primaria) que se recogen al
+# auditar un paso: 2 -> tres opiniones en total, el minimo para votar por mayoria.
+AUDIT_REDUNDANCY = 2
 # Reconexion con espera exponencial: si el tracker se cae, el cliente no debe
 # rendirse con un "Enjambre vacio" al primer intento.
 RECONNECT_ATTEMPTS = 5
@@ -190,6 +195,10 @@ class AgenticChat:
         self.audit_epsilon = audit_epsilon
         self.audit_stats = {"checked": 0, "mismatches": 0}
         self._audit_warned = False
+        # [CAPA 3] Muestreo adaptativo: los nodos nuevos o ya sospechosos se
+        # auditan mucho mas que los consolidados. La base es la probabilidad
+        # configurada por el usuario (respeta su presupuesto de latencia).
+        self.sampler = AdaptiveSampler(base_probability=self.audit_probability)
 
     # ------------------------------------------------------------------ red
 
@@ -486,56 +495,101 @@ class AgenticChat:
 
     # ------------------------------------------------- proof of compute
 
-    async def _audit_step(self, hidden_states, position_ids, reference_logits):
-        """Repite el paso por una ruta alternativa y compara con tolerancia.
+    def _worker_node_ids(self, route):
+        """Identidades de los nodos trabajadores de una ruta (sin el callback)."""
+        hops = list(route or [])
+        if hops and self._route_ends_at_our_callback(hops):
+            hops = hops[:-1]
+        return [routing.hop_node_id(hop) for hop in hops if routing.hop_node_id(hop)]
 
-        La comparacion es de L2 relativa, no de igualdad: el downcast a float16
-        del `secret_sauce` y la variacion de hardware hacen imposible el bit a bit.
+    async def _audit_step(self, hidden_states, position_ids, reference_logits):
+        """[CAPA 3] Verificacion redundante cruzada con atribucion de culpa.
+
+        Reune opiniones independientes ejecutando el MISMO paso por rutas
+        disjuntas (hasta :data:`AUDIT_REDUNDANCY` alternativas ademas de la
+        primaria) y decide por MAYORIA quien miente. A diferencia de la auditoria
+        de una sola alternativa, aqui:
+
+        * Con tres o mas opiniones el resultado minoritario delata al tramposo, en
+          vez de culpar a toda la ruta primaria a ciegas.
+        * Si no hay mayoria clara (empate) el dictamen es inconcluso y NO se
+          castiga a nadie, para no generar falsos positivos.
+
+        La comparacion es de L2 relativa (no bit a bit) por el downcast a float16
+        del `secret_sauce` y la variacion de hardware.
         """
-        previous_route = self.route
-        previous_exp, previous_sig = self.route_exp, self.route_sig
-        # El último salto es nuestro propio callback: no es un nodo auditable.
-        worker_hops = list(previous_route or [])
-        if worker_hops and self._route_ends_at_our_callback(worker_hops):
-            worker_hops = worker_hops[:-1]
-        excluded = {routing.hop_node_id(hop) for hop in worker_hops}
-        excluded.discard("")
-        if not excluded:
+        primary_route = self.route
+        primary_exp, primary_sig = self.route_exp, self.route_sig
+        primary_workers = self._worker_node_ids(primary_route)
+        if not primary_workers:
             if not self._audit_warned:
                 logger.info("[Auditoría] Sin identidades de nodo en la ruta: auditoría desactivada.")
                 self._audit_warned = True
             return None
 
-        self.route = None
-        alternative = await self._plan_route(exclude=excluded)
+        # La opinion primaria ya esta calculada; ahora se recogen alternativas.
+        opinions = [(tuple(primary_workers), reference_logits)]
+        used = set(primary_workers)
         try:
-            if not alternative:
-                if not self._audit_warned:
-                    logger.info("[Auditoría] No hay ruta alternativa disponible para auditar.")
-                    self._audit_warned = True
-                return None
-            audited_nodes = [routing.hop_node_id(hop) for hop in worker_hops]
-            candidate = await self._run_pipeline_step(hidden_states, position_ids, timeout=30.0)
-        except PipelineError as exc:
-            logger.warning(f"[Auditoría] No se pudo completar la comprobación: {exc}")
-            return None
+            for _ in range(AUDIT_REDUNDANCY):
+                self.route = None
+                if not await self._plan_route(exclude=set(used)):
+                    break
+                alt_workers = self._worker_node_ids(self.route)
+                if not alt_workers:
+                    break
+                try:
+                    output = await self._run_pipeline_step(hidden_states, position_ids, timeout=30.0)
+                except PipelineError as exc:
+                    logger.warning(f"[Auditoría] No se pudo completar una réplica: {exc}")
+                    break
+                opinions.append((tuple(alt_workers), output))
+                used.update(alt_workers)
         finally:
-            self.route, self.route_exp, self.route_sig = previous_route, previous_exp, previous_sig
+            self.route, self.route_exp, self.route_sig = primary_route, primary_exp, primary_sig
+
+        if len(opinions) < 2:
+            if not self._audit_warned:
+                logger.info("[Auditoría] No hay ruta alternativa disponible para auditar.")
+                self._audit_warned = True
+            return None
 
         self.audit_stats["checked"] += 1
-        if outputs_match(reference_logits, candidate, self.audit_epsilon):
+        verdict = crossverify.attribute(opinions, self.audit_epsilon)
+
+        if verdict.status is VerdictStatus.UNANIMOUS:
+            for label, _ in opinions:
+                self.sampler.record_route(label, agreed=True)
             return True
 
-        divergence = relative_l2(reference_logits, candidate)
-        self.audit_stats["mismatches"] += 1
-        logger.error(f"[Auditoría] DIVERGENCIA detectada (L2 relativa {divergence:.4f} > "
-                     f"{self.audit_epsilon}). Nodos implicados: {audited_nodes}")
-        await self._report_audit_failure(audited_nodes, divergence)
-        for node_id in audited_nodes:
-            if node_id:
+        if verdict.attributable:
+            self.audit_stats["mismatches"] += 1
+            by_label = dict(opinions)
+            suspect_nodes = [node for label in verdict.suspect for node in label]
+            trusted_nodes = [node for label in verdict.trusted for node in label]
+            divergence = max(
+                (relative_l2(reference_logits, by_label[label]) for label in verdict.suspect),
+                default=0.0,
+            )
+            logger.error(f"[Auditoría] DIVERGENCIA atribuida por mayoría ({verdict.majority_size}/"
+                         f"{verdict.total}). Culpables: {suspect_nodes} (L2 relativa {divergence:.4f}).")
+            self.sampler.record_route(suspect_nodes, agreed=False)
+            self.sampler.record_route(trusted_nodes, agreed=True)
+            await self._report_audit_failure(suspect_nodes, divergence)
+            for node_id in suspect_nodes:
                 self.failed_nodes.add(node_id)
-        self._invalidate_route()
-        return False
+            # Si la ruta en uso contiene a un culpable, hay que replanificar.
+            if any(node in suspect_nodes for node in primary_workers):
+                self._invalidate_route()
+            return False
+
+        # Empate / opiniones insuficientes: no se puede atribuir sin arriesgar un
+        # falso positivo. Se sube la sospecha de todos y se deja pasar el veredicto.
+        logger.warning(f"[Auditoría] Verificación cruzada INCONCLUSA ({verdict.status.value}, "
+                       f"{verdict.total} opiniones): no se atribuye culpa.")
+        for label, _ in opinions:
+            self.sampler.record_route(label, agreed=False)
+        return None
 
     async def _report_audit_failure(self, node_ids, divergence):
         """Reporta una divergencia detectada por la auditoria (Proof of Compute)."""
@@ -649,7 +703,10 @@ class AgenticChat:
                 if token_callback: token_callback(msg)
                 break
 
-            if self.audit_probability and random.random() < self.audit_probability:
+            # [CAPA 3] El muestreo adaptativo decide si auditar segun lo
+            # sospechoso que sea el nodo mas debil de la ruta actual.
+            if self.audit_probability and self.sampler.should_audit(
+                    self._worker_node_ids(self.route)):
                 await self._audit_step(hidden_states, position_ids, logits)
 
             next_token_logits = logits[0, -1, :]
