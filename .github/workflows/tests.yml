@@ -26,7 +26,7 @@ jobs:
           pytest -q tests/test_client_routing.py tests/test_config_qos.py \
             tests/test_protocol.py tests/test_routing.py tests/test_tls_pow.py \
             tests/test_tracker.py tests/test_kv_cache.py tests/test_reputation.py \
-            tests/test_crossverify.py
+            tests/test_crossverify.py tests/test_worker_kvcache.py
       - name: Auditoría de dependencias Python
         run: |
           pip install pip-audit
