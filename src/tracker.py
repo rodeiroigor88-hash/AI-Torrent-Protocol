@@ -28,10 +28,14 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from typing import Dict
+
 from aiohttp import web
 
 from src import routing
+from src import reputation
 from src.ratelimit import RateLimiter
+from src.reputation import NodeReputation
 from src.tls_utils import load_private_key  # noqa: F401  (paridad de API con la PKI)
 
 logger = logging.getLogger(__name__)
@@ -86,7 +90,9 @@ class Tracker:
         # ese callback es legitimo, asi que se puede relajar explicitamente.
         self.allow_private_callbacks = bool(allow_private_callbacks)
         self.nodes = {}
-        self.reports = {}
+        # Reputacion persistente por node_id: sobrevive a la poda de `nodes` para
+        # que un tramposo no borre su historial reapareciendo con el mismo id.
+        self.reputation: Dict[str, NodeReputation] = {}
 
         self.register_limiter = RateLimiter(REGISTER_RATE, REGISTER_BURST)
         self.plan_limiter = RateLimiter(PLAN_RATE, PLAN_BURST)
@@ -111,6 +117,23 @@ class Tracker:
         return web.json_response(
             {"error": "too many requests"}, status=429,
             headers={"Retry-After": str(max(1, int(retry_after + 0.999)))},
+        )
+
+    def _rep(self, node_id: str) -> NodeReputation:
+        """Devuelve (creandola si hace falta) la reputacion de un nodo."""
+        rep = self.reputation.get(node_id)
+        if rep is None:
+            rep = NodeReputation(node_id=node_id)
+            self.reputation[node_id] = rep
+        return rep
+
+    def _node_score(self, node: dict) -> float:
+        """Puntua un nodo candidato con la matriz latencia/reputacion/ancho de banda."""
+        return reputation.score_node(
+            self.reputation.get(node["node_id"]),
+            node.get("donated_cores"),
+            node.get("donated_ram_mb"),
+            now=self._time(),
         )
 
     def prune(self):
@@ -139,14 +162,19 @@ class Tracker:
         Devuelve la lista de saltos o None si la cadena no llega hasta un nodo
         final: una ruta incompleta nunca produciria logits, asi que es mejor no
         entregarla que dejar al cliente esperando un callback que no llegara.
+
+        Enrutamiento inteligente (CAPA 2): ante varios nodos que cubren el mismo
+        rango de capas, gana el de mejor score (latencia + reputacion + ancho de
+        banda); el latido mas reciente solo desempata scores identicos.
         """
         candidates = self.active_nodes(model_arch, exclude)
         by_start = {}
         for node in candidates:
-            # Ante dos nodos con el mismo rango, gana el de latido mas reciente.
+            key = (self._node_score(node), node["last_seen"])
             current = by_start.get(node["start_layer"])
-            if current is None or node["last_seen"] > current["last_seen"]:
-                by_start[node["start_layer"]] = node
+            if current is None or key > current[0]:
+                by_start[node["start_layer"]] = (key, node)
+        by_start = {layer: value[1] for layer, value in by_start.items()}
 
         route, next_layer, used = [], start_layer, set()
         while len(route) < MAX_PLAN_HOPS:
@@ -214,6 +242,15 @@ class Tracker:
         if node_id not in self.nodes and len(self.nodes) >= MAX_NODES:
             return web.json_response({"error": "registro lleno"}, status=503)
 
+        # Latencia auto-reportada por el nodo (ms por forward): alimenta el
+        # enrutamiento por latencia. Se ignora en silencio si no es un numero
+        # valido, para no rechazar un latido legitimo por un campo opcional.
+        rep = self._rep(node_id)
+        raw_latency = body.get("latency_ms")
+        if isinstance(raw_latency, (int, float)) and not isinstance(raw_latency, bool) \
+                and raw_latency >= 0:
+            rep.observe_latency(float(raw_latency))
+
         self.nodes[node_id] = {
             "node_id": node_id,
             "forward_url": f"{scheme}://{host}:{port}/forward",
@@ -231,7 +268,7 @@ class Tracker:
             "paused": bool(body.get("paused")),
             "donated_cores": body.get("donated_cores"),
             "donated_ram_mb": body.get("donated_ram_mb"),
-            "failures": self.reports.get(node_id, 0),
+            "failures": rep.anomalies,
             "last_seen": self._time(),
         }
         return web.json_response({"status": "ok", "expires_in": self.node_timeout})
@@ -247,8 +284,12 @@ class Tracker:
         except ValueError:
             return web.json_response({"error": "start_layer invalido"}, status=400)
         exclude = {item for item in request.query.get("exclude", "").split(",") if item}
-        # Un nodo con auditorias fallidas no vuelve a entrar en una ruta.
-        exclude |= {node_id for node_id, failures in self.reports.items() if failures > 0}
+        # Un nodo en cuarentena (Slash) no vuelve a entrar en una ruta hasta que
+        # su penalizacion expira; a diferencia del veto permanente anterior, aqui
+        # el nodo puede rehabilitarse cuando pasa el backoff.
+        now = self._time()
+        exclude |= {node_id for node_id, rep in self.reputation.items()
+                    if rep.is_quarantined(now)}
 
         # El callback del cliente forma parte de la ruta FIRMADA. Si el cliente
         # pudiera anadirlo despues, el ultimo worker aceptaria entregar a
@@ -318,28 +359,50 @@ class Tracker:
         if not isinstance(reported, list) or len(reported) > routing.MAX_ROUTE_HOPS:
             return web.json_response({"error": "lista de nodos invalida"}, status=400)
 
+        # Motivo del reporte: divergencia (auditoria), timeout o formato corrupto.
+        # Cualquier valor desconocido se normaliza a "divergence" en la reputacion.
+        reason = body.get("reason")
+        if not isinstance(reason, str):
+            reason = reputation.REASON_DIVERGENCE
+
+        now = self._time()
+        flagged = 0
         for node_id in reported:
             if not isinstance(node_id, str) or not node_id:
                 continue
-            self.reports[node_id] = self.reports.get(node_id, 0) + 1
+            rep = self._rep(node_id)
+            rep.record_anomaly(reason, now)
             if node_id in self.nodes:
-                self.nodes[node_id]["failures"] = self.reports[node_id]
-            logger.warning("Divergencia reportada contra %s (total %d). Excluido de las rutas.",
-                           node_id, self.reports[node_id])
-        return web.json_response({"status": "ok", "flagged": len(reported)})
+                self.nodes[node_id]["failures"] = rep.anomalies
+            flagged += 1
+            logger.warning("Anomalia (%s) reportada contra %s (total %d). "
+                           "En cuarentena hasta t+%.0fs.",
+                           rep.last_reason, node_id, rep.anomalies,
+                           rep.quarantined_until - now)
+        return web.json_response({"status": "ok", "flagged": flagged})
 
     async def handle_status(self, request):
         self.prune()
         now = self._time()
+
+        def node_view(node):
+            rep = self.reputation.get(node["node_id"])
+            return {
+                "node_id": node["node_id"], "layers": node["layers"],
+                "is_last": node["is_last"], "model_arch": node["model_arch"],
+                "tls": node["tls"], "failures": node["failures"],
+                "seen_ago": round(now - node["last_seen"], 1),
+                "score": round(self._node_score(node), 4),
+                "latency_ms": round(rep.latency_ms, 1) if rep and rep.latency_ms is not None else None,
+                "quarantined": bool(rep and rep.is_quarantined(now)),
+            }
+
         return web.json_response({
-            "nodes": [
-                {"node_id": node["node_id"], "layers": node["layers"],
-                 "is_last": node["is_last"], "model_arch": node["model_arch"],
-                 "tls": node["tls"], "failures": node["failures"],
-                 "seen_ago": round(now - node["last_seen"], 1)}
-                for node in sorted(self.nodes.values(), key=lambda item: item["start_layer"])
-            ],
-            "flagged": self.reports,
+            "nodes": [node_view(node)
+                      for node in sorted(self.nodes.values(), key=lambda item: item["start_layer"])],
+            # Solo los nodos con anomalias acumuladas (vista compacta para monitores).
+            "flagged": {node_id: rep.anomalies for node_id, rep in self.reputation.items()
+                        if rep.anomalies > 0},
             "node_timeout": self.node_timeout,
         })
 

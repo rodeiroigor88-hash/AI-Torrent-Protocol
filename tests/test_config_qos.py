@@ -110,6 +110,9 @@ def test_settings_panel_round_trip_reaches_the_running_components(temp_config):
 def test_tray_icon_is_drawable_without_external_resources():
     """El icono se dibuja en código: si faltara el .ico, el usuario se quedaba
     sin ninguna pista visible de que la aplicación está corriendo."""
+    # La GUI (customtkinter/Pillow) es solo de Windows y no está en el CI
+    # headless; sin ella este test se salta en vez de fallar la suite entera.
+    pytest.importorskip("customtkinter")
     from src.ghost_terminal import build_ghost_icon
 
     icon = build_ghost_icon(32)

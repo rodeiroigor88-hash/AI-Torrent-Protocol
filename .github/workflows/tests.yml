@@ -14,14 +14,19 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      - name: Deps ligeras (sin torch/transformers)
+      - name: Dependencias de ejecución (torch CPU + runtime)
         run: |
-          pip install aiohttp msgpack cryptography pytest
-      - name: pytest suite ligera y e2e del tracker
+          # torch en su rueda CPU: la suite (tensor_utils, p2p_node, chat_agent)
+          # importa torch, asi que el CI ligero "sin torch" nunca podia coleccionar.
+          # La rueda CPU evita descargar el build CUDA de ~2 GB.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install aiohttp msgpack cryptography pytest transformers numpy psutil
+      - name: pytest (suite backend completa)
         run: |
           pytest -q tests/test_client_routing.py tests/test_config_qos.py \
             tests/test_protocol.py tests/test_routing.py tests/test_tls_pow.py \
-            tests/test_tracker.py
+            tests/test_tracker.py tests/test_kv_cache.py tests/test_reputation.py \
+            tests/test_crossverify.py
       - name: Auditoría de dependencias Python
         run: |
           pip install pip-audit
